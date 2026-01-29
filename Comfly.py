@@ -16033,9 +16033,9 @@ class Comfly_HaoeeVideo_Wan:
                 "prompt": ("STRING", {"multiline": True}),
                 "negative_prompt": ("STRING", {"multiline": True}),
                 "resolution": (["720P", "1080P"], {"default": "720P"}),
-                "duration": ("INT", {"default": 10}),
+                "duration": (["5", "10", "15"], {"default": "5"}),
                 "prompt_extend": ("BOOLEAN", {"default": False}),
-                "shot_type": (["single","multi"], {"default": "single"}),
+                "shot_type": (["single", "multi"], {"default": "single"}),
                 "audio": ("BOOLEAN", {"default": False}),
                 "watermark": ("BOOLEAN", {"default": False}),
                 "apikey": ("STRING", {"default": ""}),
@@ -16064,7 +16064,7 @@ class Comfly_HaoeeVideo_Wan:
         base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
         return f"data:image/png;base64,{base64_str}"
     
-    def generate_video(self, model, prompt, negative_prompt, resolution="720P", duration=10, prompt_extend=False, shot_type="single", audio=False, watermark=False, apikey="", image=None, seed=0):
+    def generate_video(self, model, prompt, negative_prompt, resolution="720P", duration="5", prompt_extend=False, shot_type="single", audio=False, watermark=False, apikey="", image=None, seed=0):
         empty_video = ComflyVideoAdapter("")
         if apikey.strip():
             self.api_key = apikey
