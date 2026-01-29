@@ -16359,7 +16359,7 @@ class Comfly_HaoeeImage_nano_banana2:
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["nano-banana-2"], {"default": "nano-banana-2"}),
+                "model": (["gemini-3-pro-image-preview"], {"default": "gemini-3-pro-image-preview"}),
                 "aspect_ratio": (["auto", "4:3", "3:4", "16:9", "9:16", "2:3", "3:2", "1:1", "4:5", "5:4", "21:9"], {"default": "auto"}),
                 "image_size": (["1K", "2K", "4K"], {"default": "1K"}),
                 "response_format": (["url", "b64_json"], {"default": "url"}),
@@ -16432,7 +16432,7 @@ class Comfly_HaoeeImage_nano_banana2:
             }
                         
             response = requests.post(
-                f"{baseurl}/v1/images/generations",
+                f"{baseurl}/v1beta/models/gemini-3-pro-image-preview:generateContent",
                 headers=headers,
                 json=payload,
                 timeout=self.timeout
@@ -16522,7 +16522,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["doubao-seedream-4-5-251128"], {"default": "doubao-seedream-4-5-251128"}),
+                "model": (["doubao-seedream-4-5-251128", 'doubao-seedream-4-0-250828'], {"default": "doubao-seedream-4-5-251128"}),
                 "response_format": (["url", "b64_json"], {"default": "url"}),
                 "resolution": (["2K", "4K"], {"default": "2K"}),
                 "aspect_ratio": (["1:1", "4:3", "3:4", "16:9", "9:16", "2:3", "3:2", "21:9", "Custom"], {"default": "16:9"}),
@@ -16741,6 +16741,167 @@ class Comfly_HaoeeImage_Doubao_Seedream:
             blank_image = Image.new('RGB', (1024, 1024), color='white')
             blank_tensor = pil2tensor(blank_image)
             return (blank_tensor, error_message, "")
+
+class Comfly_HaoeeImage_gpt_image:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "prompt": ("STRING", {"multiline": True}),
+            },
+            "optional": {
+                "api_key": ("STRING", {"default": ""}),
+                "model": (["gpt-image-1.5"], {"default": "gpt-image-1.5"}),
+                "n": ("INT", {"default": 1, "min": 1, "max": 10}),
+                "quality": (["auto", "high", "medium", "low"], {"default": "auto"}),
+                "size": (["auto", "1024x1024", "1536x1024", "1024x1536"], {"default": "auto"}),
+                "background": (["auto", "transparent", "opaque"], {"default": "auto"}),
+                "output_format": (["png", "jpeg", "webp"], {"default": "png"}),
+                "moderation": (["auto", "low"], {"default": "auto"}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
+            }
+        }
+    
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("generated_image", "response")
+    FUNCTION = "generate_image"
+    CATEGORY = "haoee/Openai"
+
+    def __init__(self):
+        self.timeout = 300
+
+    def get_headers(self, model):
+        return {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+            "modelName": model
+        }
+
+    def generate_image(self, prompt, model="gpt-image-1.5", n=1, quality="auto", 
+                size="auto", background="auto", output_format="png", 
+                moderation="auto", seed=0, api_key=""):
+        
+        if api_key.strip():
+            self.api_key = api_key
+            
+        try:
+            if not self.api_key:
+                error_message = "API key not found in Comflyapi.json"
+                print(error_message)
+                blank_image = Image.new('RGB', (1024, 1024), color='white')
+                blank_tensor = pil2tensor(blank_image)
+                return (blank_tensor, error_message)
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+            payload = {
+                "prompt": prompt,
+                "model": model,
+                "n": n,
+                "quality": quality,
+                "background": background,
+                "output_format": output_format,
+                "moderation": moderation,
+            }
+
+            if size != "auto":
+                payload["size"] = size
+            
+            response = requests.post(
+                f"{baseurl}/v1/images/generations",
+                headers=self.get_headers(),
+                json=payload,
+                timeout=self.timeout
+            )
+            
+            pbar.update_absolute(50)
+            if response.status_code != 200:
+                error_message = f"API Error: {response.status_code} - {response.text}"
+                print(error_message)
+                blank_image = Image.new('RGB', (1024, 1024), color='white')
+                blank_tensor = pil2tensor(blank_image)
+                return (blank_tensor, error_message)
+
+            result = response.json()
+
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            response_info = f"**GPT-image-1 Generation ({timestamp})**\n\n"
+            response_info += f"Prompt: {prompt}\n"
+            response_info += f"Model: {model}\n"
+            response_info += f"Quality: {quality}\n"
+            if size != "auto":
+                response_info += f"Size: {size}\n"
+            response_info += f"Background: {background}\n"
+            response_info += f"Seed: {seed} (Note: Seed not used by API)\n\n"
+
+            generated_images = []
+            image_urls = []
+            
+            if "data" in result and result["data"]:
+                for i, item in enumerate(result["data"]):
+                    pbar.update_absolute(50 + (i+1) * 50 // len(result["data"]))
+                    
+                    if "b64_json" in item:
+                        b64_data = item["b64_json"]
+                        if b64_data.startswith("data:image/png;base64,"):
+                            b64_data = b64_data[len("data:image/png;base64,"):]    
+                        image_data = base64.b64decode(b64_data)
+                        generated_image = Image.open(BytesIO(image_data))
+                        generated_tensor = pil2tensor(generated_image)
+                        generated_images.append(generated_tensor)
+                    elif "url" in item:
+                        image_urls.append(item["url"])
+                        try:
+                            img_response = requests.get(item["url"])
+                            if img_response.status_code == 200:
+                                generated_image = Image.open(BytesIO(img_response.content))
+                                generated_tensor = pil2tensor(generated_image)
+                                generated_images.append(generated_tensor)
+                        except Exception as e:
+                            print(f"Error downloading image from URL: {str(e)}")
+            else:
+                error_message = "No generated images in response"
+                print(error_message)
+                response_info += f"Error: {error_message}\n"
+                blank_image = Image.new('RGB', (1024, 1024), color='white')
+                blank_tensor = pil2tensor(blank_image)
+                return (blank_tensor, response_info)
+
+            if "usage" in result:
+                response_info += "Usage Information:\n"
+                if "total_tokens" in result["usage"]:
+                    response_info += f"Total Tokens: {result['usage']['total_tokens']}\n"
+                if "input_tokens" in result["usage"]:
+                    response_info += f"Input Tokens: {result['usage']['input_tokens']}\n"
+                if "output_tokens" in result["usage"]:
+                    response_info += f"Output Tokens: {result['usage']['output_tokens']}\n"
+
+                if "input_tokens_details" in result["usage"]:
+                    response_info += "Input Token Details:\n"
+                    details = result["usage"]["input_tokens_details"]
+                    if "text_tokens" in details:
+                        response_info += f"  Text Tokens: {details['text_tokens']}\n"
+                    if "image_tokens" in details:
+                        response_info += f"  Image Tokens: {details['image_tokens']}\n"
+            
+            if generated_images:
+                combined_tensor = torch.cat(generated_images, dim=0)
+                
+                pbar.update_absolute(100)
+                return (combined_tensor, response_info)
+            else:
+                error_message = "No images were successfully processed"
+                print(error_message)
+                response_info += f"Error: {error_message}\n"
+                blank_image = Image.new('RGB', (1024, 1024), color='white')
+                blank_tensor = pil2tensor(blank_image)
+                return (blank_tensor, response_info)
+                
+        except Exception as e:
+            error_message = f"Error in image generation: {str(e)}"
+            print(error_message)
+            blank_image = Image.new('RGB', (1024, 1024), color='white')
+            blank_tensor = pil2tensor(blank_image)
+            return (blank_tensor, error_message)
 
 
 class Comfly_HaoeeText:
