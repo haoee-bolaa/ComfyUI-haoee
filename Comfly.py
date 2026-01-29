@@ -17126,6 +17126,7 @@ NODE_CLASS_MAPPINGS = {
     # "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
     # "Comfly_HaoeeImage_nano_banana2": Comfly_HaoeeImage_nano_banana2,
     "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
+    "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
     "Comfly_HaoeeText": Comfly_HaoeeText
 }
 
@@ -17201,6 +17202,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeVideo_Wan": "好易 视频 Wan",
     # "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
     # "Comfly_HaoeeImage_nano_banana2": "好易 绘图 nano banana2",
+    "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
     "Comfly_HaoeeImage_Doubao_Seedream": "好易 绘图 Doubao Seedream",
     "Comfly_HaoeeText": "好易 LLM",
 }
