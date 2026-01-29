@@ -15375,6 +15375,17 @@ class Comfly_HaoeeVideo_Sora2:
         base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
         return f"data:image/png;base64,{base64_str}"
     
+    def get_image_size(self, image):
+        """
+        image: ComfyUI IMAGE tensor
+        return: (width, height)
+        """
+        if image is None:
+            return None
+
+        _, height, width, _ = image.shape
+        return (width, height)
+
     def process(self, prompt, model,  seconds="4", size="720x1280", apikey="", image=None, seed=0):
         if apikey.strip():
             self.api_key = apikey
@@ -15385,6 +15396,13 @@ class Comfly_HaoeeVideo_Sora2:
             
         if image is None:
             error_message = "Image not provided"
+            print(error_message)
+            return (None, "", json.dumps({"status": "error", "message": error_message}))
+
+        width, height = self.get_image_size(image)
+
+        if (width, height) not in [(1280, 720), (720, 1280), (1024, 1792), (1792, 1024)]:
+            error_message = "图片尺寸必须为 1280x720, 720x1280, 1024x1792, or 1792x1024"
             print(error_message)
             return (None, "", json.dumps({"status": "error", "message": error_message}))
 
