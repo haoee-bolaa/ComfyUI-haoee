@@ -16752,14 +16752,17 @@ class Comfly_HaoeeText:
         return {
             "required": {
                 "model": ([
-                    "deepseek-v3.1",
+                    "deepseek-r1",
+                    "deepseek-v3.2",
+                    "claude-opus-4-5-20251101",
                     "doubao-seed-1-6-251015",
-                    "qwen3-235b-a22b-instruct-2507",
+                    "qwen3-max",
+                    "qwen3-vl-plus",
+                    "qwen-plus",
                     "gemini-3-pro-preview",
-                    "gemini-3-flash-preview",
-                    "gemini-2.5-flash",
-                    "gpt-5",
-                    "glm-4v"
+                    # "gpt-5",
+                    "glm-4.7",
+                    "glm-4.7-flash",
                 ], {"default": "gemini-3-pro-preview"}),
                 "role": ("STRING", {"multiline": True, "default": "You are a helpful assistant"}),
                 "prompt": ("STRING", {"multiline": True, "default": "describe the image"}),
