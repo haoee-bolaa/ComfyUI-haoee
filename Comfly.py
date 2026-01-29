@@ -16030,7 +16030,7 @@ class Comfly_HaoeeVideo_Wan:
             "required": {
                 "image": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["wan2.6-i2v-flash"], {"default": "wan2.6-i2v-flash"}),
+                "model": (["wan2.6-i2v-flash", "wan2.6-i2v"], {"default": "wan2.6-i2v-flash"}),
                 "negative_prompt": ("STRING", {"multiline": True}),
                 "resolution": (["720P", "1080P"], {"default": "720P"}),
                 "duration": ("INT", {"default": 5, "min": 2, "max": 15, "step": 1}),
@@ -16516,7 +16516,7 @@ class Comfly_HaoeeImage_nano_banana2:
             return (blank_tensor, error_message, "")
 
 
-class Comfly_HaoeeImage_Doubao_Seedream_4_5:
+class Comfly_HaoeeImage_Doubao_Seedream:
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -16956,15 +16956,15 @@ NODE_CLASS_MAPPINGS = {
     # "Comfly_wan2_6_API": Comfly_wan2_6_API,
 
     "Comfly_Haoee_api_key": Comfly_Haoee_api_key,
-    "Comfly_HaoeeVideo_MiniMax": Comfly_HaoeeVideo_MiniMax,
-    "Comfly_HaoeeVideo_Sora2": Comfly_HaoeeVideo_Sora2,
-    "Comfly_HaoeeVideo_Kling": Comfly_HaoeeVideo_Kling,
-    "Comfly_HaoeeVideo_vidu": Comfly_HaoeeVideo_vidu,
-    "Comfly_HaoeeVideo_Veo3": Comfly_HaoeeVideo_Veo3,
+    # "Comfly_HaoeeVideo_MiniMax": Comfly_HaoeeVideo_MiniMax,
+    # "Comfly_HaoeeVideo_Sora2": Comfly_HaoeeVideo_Sora2,
+    # "Comfly_HaoeeVideo_Kling": Comfly_HaoeeVideo_Kling,
+    # "Comfly_HaoeeVideo_vidu": Comfly_HaoeeVideo_vidu,
+    # "Comfly_HaoeeVideo_Veo3": Comfly_HaoeeVideo_Veo3,
     "Comfly_HaoeeVideo_Wan": Comfly_HaoeeVideo_Wan,
-    "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
-    "Comfly_HaoeeImage_nano_banana2": Comfly_HaoeeImage_nano_banana2,
-    "Comfly_HaoeeImage_Doubao_Seedream_4_5": Comfly_HaoeeImage_Doubao_Seedream_4_5,
+    # "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
+    # "Comfly_HaoeeImage_nano_banana2": Comfly_HaoeeImage_nano_banana2,
+    "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
     "Comfly_HaoeeText": Comfly_HaoeeText
 }
 
@@ -17031,17 +17031,17 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # "Comfly_LLm_API": "Haoee LLM API",
     # "Comfly_wan2_6_API": "Haoee WanX 2.6 Video",
 
-    "Comfly_Haoee_api_key": "好易-API Key",
-    "Comfly_HaoeeVideo_MiniMax": "好易 视频-MiniMax",
-    "Comfly_HaoeeVideo_Sora2": "好易 视频-Sora2",
-    "Comfly_HaoeeVideo_Kling": "好易 视频-Kling",
-    "Comfly_HaoeeVideo_vidu": "好易 视频-Vidu",
-    "Comfly_HaoeeVideo_Veo3": "好易 视频-Veo3",
-    "Comfly_HaoeeVideo_Wan": "好易 视频-Wan",
-    "Comfly_HaoeeVideo_Doubao": "好易 视频-Doubao",
-    "Comfly_HaoeeImage_nano_banana2": "好易 图像-nano banana2",
-    "Comfly_HaoeeImage_Doubao_Seedream_4_5": "好易 图像-Doubao Seedream4.5",
-    "Comfly_HaoeeText": "好易 文生文",
+    "Comfly_Haoee_api_key": "好易 API Key",
+    # "Comfly_HaoeeVideo_MiniMax": "好易 视频 MiniMax",
+    # "Comfly_HaoeeVideo_Sora2": "好易 视频 Sora2",
+    # "Comfly_HaoeeVideo_Kling": "好易 视频 Kling",
+    # "Comfly_HaoeeVideo_vidu": "好易 视频 Vidu",
+    # "Comfly_HaoeeVideo_Veo3": "好易 视频 Veo3",
+    "Comfly_HaoeeVideo_Wan": "好易 视频 Wan",
+    # "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
+    # "Comfly_HaoeeImage_nano_banana2": "好易 绘图 nano banana2",
+    "Comfly_HaoeeImage_Doubao_Seedream": "好易 绘图 Doubao Seedream",
+    "Comfly_HaoeeText": "好易 LLM",
 }
 
 # Aliyun WanX 2.6 API Node
