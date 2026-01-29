@@ -16751,7 +16751,7 @@ class Comfly_HaoeeImage_gpt_image:
             },
             "optional": {
                 "api_key": ("STRING", {"default": ""}),
-                "model": (["gpt-image-1.5"], {"default": "gpt-image-1.5"}),
+                "model": (["gpt-image-1.5", 'gpt-4o-image-vip'], {"default": "gpt-image-1.5"}),
                 "n": ("INT", {"default": 1, "min": 1, "max": 10}),
                 "quality": (["auto", "high", "medium", "low"], {"default": "auto"}),
                 "size": (["auto", "1024x1024", "1536x1024", "1024x1536"], {"default": "auto"}),
@@ -16765,17 +16765,10 @@ class Comfly_HaoeeImage_gpt_image:
     RETURN_TYPES = ("IMAGE", "STRING")
     RETURN_NAMES = ("generated_image", "response")
     FUNCTION = "generate_image"
-    CATEGORY = "haoee/Openai"
+    CATEGORY = "好易/Image"
 
     def __init__(self):
         self.timeout = 300
-
-    def get_headers(self, model):
-        return {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
-            "modelName": model
-        }
 
     def generate_image(self, prompt, model="gpt-image-1.5", n=1, quality="auto", 
                 size="auto", background="auto", output_format="png", 
@@ -16793,6 +16786,11 @@ class Comfly_HaoeeImage_gpt_image:
                 return (blank_tensor, error_message)
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "modelName": model
+            }
             payload = {
                 "prompt": prompt,
                 "model": model,
@@ -16808,7 +16806,7 @@ class Comfly_HaoeeImage_gpt_image:
             
             response = requests.post(
                 f"{baseurl}/v1/images/generations",
-                headers=self.get_headers(),
+                headers=headers,
                 json=payload,
                 timeout=self.timeout
             )
@@ -17124,7 +17122,7 @@ NODE_CLASS_MAPPINGS = {
     # "Comfly_HaoeeVideo_Veo3": Comfly_HaoeeVideo_Veo3,
     "Comfly_HaoeeVideo_Wan": Comfly_HaoeeVideo_Wan,
     # "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
-    # "Comfly_HaoeeImage_nano_banana2": Comfly_HaoeeImage_nano_banana2,
+    "Comfly_HaoeeImage_nano_banana2": Comfly_HaoeeImage_nano_banana2,
     "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
     "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
     "Comfly_HaoeeText": Comfly_HaoeeText
@@ -17201,7 +17199,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # "Comfly_HaoeeVideo_Veo3": "好易 视频 Veo3",
     "Comfly_HaoeeVideo_Wan": "好易 视频 Wan",
     # "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
-    # "Comfly_HaoeeImage_nano_banana2": "好易 绘图 nano banana2",
+    "Comfly_HaoeeImage_nano_banana2": "好易 绘图 nano banana2",
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
     "Comfly_HaoeeImage_Doubao_Seedream": "好易 绘图 Doubao Seedream",
     "Comfly_HaoeeText": "好易 LLM",
