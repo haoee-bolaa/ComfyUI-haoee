@@ -16531,7 +16531,7 @@ class Comfly_HaoeeImage_Gemini:
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
                 "model": (["gemini-3-pro-image-preview"], {"default": "gemini-3-pro-image-preview"}),
-                "aspectRatio": (["auto","1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"], {"default": "auto"}),
+                "aspectRatio": (["1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"], {"default": "1:1"}),
                 "imageSize": (["1K", "2K", "4K"], {"default": "1K"}),
                 "apikey": ("STRING", {"default": ""}),
             },
@@ -16562,7 +16562,7 @@ class Comfly_HaoeeImage_Gemini:
         pil_image.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode('utf-8')
     
-    def generate_image(self, prompt, model="gemini-3-pro-image-preview", aspectRatio="auto", 
+    def generate_image(self, prompt, model="gemini-3-pro-image-preview", aspectRatio="1:1", 
                       imageSize="1K", image1=None, image2=None, image3=None, image4=None, apikey="", seed=0):
         if apikey.strip():
             self.api_key = apikey
@@ -16598,7 +16598,7 @@ class Comfly_HaoeeImage_Gemini:
                 "generationConfig": {
                     "responseModalities": ["Image"],
                     "imageConfig": {
-                        "aspectRatio": aspectRatio if aspectRatio == "auto" else "",
+                        "aspectRatio": aspectRatio,
                         "imageSize": imageSize
                     }
                 },
