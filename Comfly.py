@@ -16628,8 +16628,8 @@ class Comfly_HaoeeImage_Gemini:
             
             generated_tensors = []
             for part in parts:
-                if "thoughtSignature" in part:
-                    image_base64 = part["thoughtSignature"]
+                if "inlineData" in part:
+                    image_base64 = part["inlineData"]["data"]
                     if image_base64:
                         image_data = base64.b64decode(image_base64)
                         generated_image = Image.open(BytesIO(image_data))
