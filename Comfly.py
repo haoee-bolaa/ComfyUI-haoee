@@ -16628,14 +16628,14 @@ class Comfly_HaoeeImage_Gemini:
             
             generated_tensors = []
             for part in parts:
-                if "inlineData" in part:
-                    image_base64 = part["inlineData"]["data"]
+                if "thoughtSignature" in part:
+                    image_base64 = part["thoughtSignature"]
                     image_data = base64.b64decode(image_base64)
                     generated_image = Image.open(BytesIO(image_data))
                     generated_tensor = pil2tensor(generated_image)
                     generated_tensors.append(generated_tensor)
              
-            response_info = f"Generated {len(result['data'])} images using {model}\n"
+            response_info = f"Generated {len(result['content'])} images using {model}\n"
             response_info += f"imageSize: {imageSize}\n"       
             pbar.update_absolute(100)
             
