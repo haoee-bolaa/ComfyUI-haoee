@@ -16668,10 +16668,8 @@ class Comfly_HaoeeImage_Doubao_Seedream:
                 "prompt": ("STRING", {"multiline": True}),
                 "model": (["doubao-seedream-4-5-251128", 'doubao-seedream-4-0-250828'], {"default": "doubao-seedream-4-5-251128"}),
                 "response_format": (["url", "b64_json"], {"default": "url"}),
-                "resolution": (["2K", "4K"], {"default": "2K"}),
-                "aspect_ratio": (["1:1", "4:3", "3:4", "16:9", "9:16", "2:3", "3:2", "21:9", "Custom"], {"default": "16:9"}),
-                "width": ("INT", {"default": 1024, "min": 64, "max": 8192, "step": 1}),
-                "height": ("INT", {"default": 1024, "min": 64, "max": 8192, "step": 1}),
+                "resolution": (["1K", "2K", "4K"], {"default": "1K"}),
+                "aspect_ratio": (["1:1", "2:3", "3:2", "4:3", "3:4", "16:9", "9:16"], {"default": "1:1"}),
                 "apikey": ("STRING", {"default": ""}),
             },
             "optional": {
@@ -16691,33 +16689,39 @@ class Comfly_HaoeeImage_Doubao_Seedream:
     def __init__(self):
         self.timeout = 300
         self.size_mapping = {
-            
+            "1K": {
+                "1:1":  "1024x1024",
+                "4:3":  "1024x768",
+                "3:4":  "768x1024",
+                "16:9": "1024x576",
+                "9:16": "576x1024",
+                "2:3":  "682x1024",
+                "3:2":  "1024x682"
+            },
+
             "2K": {
-                "1:1": "2048x2048",
-                "4:3": "2304x1728",
-                "3:4": "1728x2304",
+                "1:1":  "2048x2048",
+                "4:3":  "2048x1536",
+                "3:4":  "1536x2048",
                 "16:9": "2560x1440",
                 "9:16": "1440x2560",
-                "2:3": "1664x2496",
-                "3:2": "2496x1664",
-                "21:9": "3024x1296",
-                "9:21": "1296*3024"
+                "2:3":  "1365x2048",
+                "3:2":  "2048x1365"
             },
 
             "4K": {
-                "1:1": "4096x4096",
-                "4:3": "4096x3072",
-                "3:4": "3072x4096",
+                "1:1":  "4096x4096",
+                "4:3":  "4096x3072",
+                "3:4":  "3072x4096",
                 "16:9": "4096x2304",
                 "9:16": "2304x4096",
-                "2:3": "3072x4096",
-                "3:2": "4096x3072",
-                "21:9": "4096x1728",
-                "9:21": "1728x4096"
+                "2:3":  "2731x4096",
+                "3:2":  "4096x2731"
             }
         }
 
         self.resolution_factors = {
+            "1K": 1,
             "2K": 2,
             "4K": 4
         }
@@ -16733,8 +16737,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
         image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
         return f"data:image/png;base64,{image_base64}"
     
-    def generate_image(self, prompt, model, response_format="url", resolution="2K", 
-                  aspect_ratio="1:1", width=1024, height=1024, apikey="", 
+    def generate_image(self, prompt, model, response_format="url", resolution="1K", aspect_ratio="1:1", apikey="", 
                   image1=None, image2=None, image3=None, image4=None, seed=0):
         if apikey.strip():
             self.api_key = apikey
@@ -16750,20 +16753,11 @@ class Comfly_HaoeeImage_Doubao_Seedream:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
 
-            if aspect_ratio == "Custom":
-
-                scale_factor = self.resolution_factors.get(resolution, 1)
-                scaled_width = int(width * scale_factor)
-                scaled_height = int(height * scale_factor)
-    
-                final_size = f"{scaled_width}x{scaled_height}"
-                print(f"Using custom dimensions with {resolution} scaling: {final_size}")
+            if resolution in self.size_mapping and aspect_ratio in self.size_mapping[resolution]:
+                final_size = self.size_mapping[resolution][aspect_ratio]
             else:
-                if resolution in self.size_mapping and aspect_ratio in self.size_mapping[resolution]:
-                    final_size = self.size_mapping[resolution][aspect_ratio]
-                else:
-                    final_size = "2048x2048"
-                    print(f"Warning: Combination of {resolution} resolution and {aspect_ratio} aspect ratio not found. Using {final_size}.")
+                final_size = "1024x1024"
+                print(f"Warning: Combination of {resolution} resolution and {aspect_ratio} aspect ratio not found. Using {final_size}.")
             
             headers = {
                 "Content-Type": "application/json",
