@@ -17091,7 +17091,14 @@ class Comfly_HaoeeImage_gpt_image:
                     return ("", "", "", json.dumps({"status": "error", "message": error_message, "response": full_response}))
 
                 pbar.update_absolute(60)
-                response_info = await self.get_task_info(task_id, data_preview_url)
+                response_info =  {
+                    "task_id": task_id,
+                    "data_preview_url": data_preview_url,
+                    "prompt": prompt,
+                    "model": model,
+                    "img_count": img_count,
+                    "seed": seed if seed > 0 else 0
+                }
                 return (response_info, full_response)
           
                 
