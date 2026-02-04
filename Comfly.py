@@ -16943,99 +16943,157 @@ class Comfly_HaoeeImage_gpt_image:
 
             if size != "auto":
                 payload["size"] = size
-            
-            response = requests.post(
-                f"{baseurl}/v1/images/generations",
-                headers=headers,
-                json=payload,
-                timeout=self.timeout
-            )
-            
-            pbar.update_absolute(30)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
+            if model == "gpt-image-1.5":
+                response = requests.post(
+                    f"{baseurl}/v1/images/generations",
+                    headers=headers,
+                    json=payload,
+                    timeout=self.timeout
+                )
+                pbar.update_absolute(30)
+                print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
 
-            if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                blank_image = Image.new('RGB', (1024, 1024), color='white')
-                blank_tensor = pil2tensor(blank_image)
-                return (blank_tensor, error_message)
+                if response.status_code != 200:
+                    error_message = f"API Error: {response.status_code} - {response.text}"
+                    blank_image = Image.new('RGB', (1024, 1024), color='white')
+                    blank_tensor = pil2tensor(blank_image)
+                    return (blank_tensor, error_message)
 
-            result = response.json()
-            
-            pbar.update_absolute(50)
-
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-            response_info = f"**GPT-image-1 Generation ({timestamp})**\n\n"
-            response_info += f"Prompt: {prompt}\n"
-            response_info += f"Model: {model}\n"
-            response_info += f"Quality: {quality}\n"
-            if size != "auto":
-                response_info += f"Size: {size}\n"
-            response_info += f"Background: {background}\n"
-            response_info += f"Seed: {seed} (Note: Seed not used by API)\n\n"
-
-            generated_images = []
-            image_urls = []
-            
-            if "data" in result and result["data"]:
-                for i, item in enumerate(result["data"]):
-                    pbar.update_absolute(50 + (i+1) * 50 // len(result["data"]))
-                    
-                    if "b64_json" in item:
-                        b64_data = item["b64_json"]
-                        if b64_data.startswith("data:image/png;base64,"):
-                            b64_data = b64_data[len("data:image/png;base64,"):]    
-                        image_data = base64.b64decode(b64_data)
-                        generated_image = Image.open(BytesIO(image_data))
-                        generated_tensor = pil2tensor(generated_image)
-                        generated_images.append(generated_tensor)
-                    elif "url" in item:
-                        image_urls.append(item["url"])
-                        try:
-                            img_response = requests.get(item["url"])
-                            if img_response.status_code == 200:
-                                generated_image = Image.open(BytesIO(img_response.content))
-                                generated_tensor = pil2tensor(generated_image)
-                                generated_images.append(generated_tensor)
-                        except Exception as e:
-                            print(f"Error downloading image from URL: {str(e)}")
-            else:
-                error_message = "No generated images in response"
-                print(error_message)
-                response_info += f"Error: {error_message}\n"
-                blank_image = Image.new('RGB', (1024, 1024), color='white')
-                blank_tensor = pil2tensor(blank_image)
-                return (blank_tensor, response_info)
-
-            if "usage" in result:
-                response_info += "Usage Information:\n"
-                if "total_tokens" in result["usage"]:
-                    response_info += f"Total Tokens: {result['usage']['total_tokens']}\n"
-                if "input_tokens" in result["usage"]:
-                    response_info += f"Input Tokens: {result['usage']['input_tokens']}\n"
-                if "output_tokens" in result["usage"]:
-                    response_info += f"Output Tokens: {result['usage']['output_tokens']}\n"
-
-                if "input_tokens_details" in result["usage"]:
-                    response_info += "Input Token Details:\n"
-                    details = result["usage"]["input_tokens_details"]
-                    if "text_tokens" in details:
-                        response_info += f"  Text Tokens: {details['text_tokens']}\n"
-                    if "image_tokens" in details:
-                        response_info += f"  Image Tokens: {details['image_tokens']}\n"
-            
-            if generated_images:
-                combined_tensor = torch.cat(generated_images, dim=0)
+                result = response.json()
                 
-                pbar.update_absolute(100)
-                return (combined_tensor, response_info)
+                pbar.update_absolute(50)
+            
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                response_info = f"**GPT-image-1 Generation ({timestamp})**\n\n"
+                response_info += f"Prompt: {prompt}\n"
+                response_info += f"Model: {model}\n"
+                response_info += f"Quality: {quality}\n"
+                if size != "auto":
+                    response_info += f"Size: {size}\n"
+                response_info += f"Background: {background}\n"
+                response_info += f"Seed: {seed} (Note: Seed not used by API)\n\n"
+
+                generated_images = []
+                image_urls = []
+                
+                if "data" in result and result["data"]:
+                    for i, item in enumerate(result["data"]):
+                        pbar.update_absolute(50 + (i+1) * 50 // len(result["data"]))
+                        
+                        if "b64_json" in item:
+                            b64_data = item["b64_json"]
+                            if b64_data.startswith("data:image/png;base64,"):
+                                b64_data = b64_data[len("data:image/png;base64,"):]    
+                            image_data = base64.b64decode(b64_data)
+                            generated_image = Image.open(BytesIO(image_data))
+                            generated_tensor = pil2tensor(generated_image)
+                            generated_images.append(generated_tensor)
+                        elif "url" in item:
+                            image_urls.append(item["url"])
+                            try:
+                                img_response = requests.get(item["url"])
+                                if img_response.status_code == 200:
+                                    generated_image = Image.open(BytesIO(img_response.content))
+                                    generated_tensor = pil2tensor(generated_image)
+                                    generated_images.append(generated_tensor)
+                            except Exception as e:
+                                print(f"Error downloading image from URL: {str(e)}")
+                else:
+                    error_message = "No generated images in response"
+                    print(error_message)
+                    response_info += f"Error: {error_message}\n"
+                    blank_image = Image.new('RGB', (1024, 1024), color='white')
+                    blank_tensor = pil2tensor(blank_image)
+                    return (blank_tensor, response_info)
+
+                if "usage" in result:
+                    response_info += "Usage Information:\n"
+                    if "total_tokens" in result["usage"]:
+                        response_info += f"Total Tokens: {result['usage']['total_tokens']}\n"
+                    if "input_tokens" in result["usage"]:
+                        response_info += f"Input Tokens: {result['usage']['input_tokens']}\n"
+                    if "output_tokens" in result["usage"]:
+                        response_info += f"Output Tokens: {result['usage']['output_tokens']}\n"
+
+                    if "input_tokens_details" in result["usage"]:
+                        response_info += "Input Token Details:\n"
+                        details = result["usage"]["input_tokens_details"]
+                        if "text_tokens" in details:
+                            response_info += f"  Text Tokens: {details['text_tokens']}\n"
+                        if "image_tokens" in details:
+                            response_info += f"  Image Tokens: {details['image_tokens']}\n"
+                
+                if generated_images:
+                    combined_tensor = torch.cat(generated_images, dim=0)
+                    
+                    pbar.update_absolute(100)
+                    return (combined_tensor, response_info)
+                else:
+                    error_message = "No images were successfully processed"
+                    print(error_message)
+                    response_info += f"Error: {error_message}\n"
+                    blank_image = Image.new('RGB', (1024, 1024), color='white')
+                    blank_tensor = pil2tensor(blank_image)
+                    return (blank_tensor, response_info)
             else:
-                error_message = "No images were successfully processed"
-                print(error_message)
-                response_info += f"Error: {error_message}\n"
-                blank_image = Image.new('RGB', (1024, 1024), color='white')
-                blank_tensor = pil2tensor(blank_image)
-                return (blank_tensor, response_info)
+                response = requests.post(
+                    f"{baseurl}/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=self.timeout
+                )
+                print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
+
+                if response.status_code != 200:
+                    error_message = f"API Error: {response.status_code} - {response.text}"
+                    print(error_message)
+                    return ("", "", "", json.dumps({"status": "error", "message": error_message}))
+
+                full_response = ""
+                task_id = None
+                data_preview_url = None
+                
+                for line in response.iter_lines():
+                    if line:
+                        line_text = line.decode("utf-8")
+                        if line_text.startswith("data: "):
+                            data_str = line_text[6:]
+                            if data_str == "[DONE]":
+                                break
+                            
+                            try:
+                                data = json.loads(data_str)
+                                if 'choices' in data and data['choices']:
+                                    delta = data['choices'][0].get('message', {})
+                                    if 'content' in delta:
+                                        content = delta['content']
+                                        full_response += content
+
+                                        if not task_id:
+                                            task_id_match = re.search(r"ID: `(task_[a-zA-Z0-9]+)`", full_response)
+                                            if task_id_match:
+                                                task_id = task_id_match.group(1)
+                                                print(f"Found task ID: {task_id}")
+
+                                        if not data_preview_url and task_id:
+                                            preview_match = re.search(r"\[数据预览\]\((https://asyncdata.net/web/[^)]+)\)", full_response)
+                                            if preview_match:
+                                                data_preview_url = preview_match.group(1)
+                                                print(f"Found data preview URL: {data_preview_url}")
+                                                pbar.update_absolute(30)
+                                                break  
+                            except json.JSONDecodeError:
+                                continue
+                
+                if not task_id:
+                    error_message = "Failed to obtain task ID from the response"
+                    print(error_message)
+                    return ("", "", "", json.dumps({"status": "error", "message": error_message, "response": full_response}))
+
+                pbar.update_absolute(60)
+                response_info = await self.get_task_info(task_id, data_preview_url)
+                return (response_info, full_response)
+          
                 
         except Exception as e:
             error_message = f"Error in image generation: {str(e)}"
@@ -17183,7 +17241,6 @@ class Comfly_HaoeeText:
             response_info = {
                 "prompt": prompt,
                 "model": model,
-                "temperature": temperature,
                 "img_count": img_count,
                 "seed": seed if seed > 0 else 0
             }
