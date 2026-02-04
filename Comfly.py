@@ -17052,49 +17052,29 @@ class Comfly_HaoeeImage_gpt_image:
                 full_response = ""
                 task_id = None
                 data_preview_url = None
-                
-                for line in response.iter_lines():
-                    if line:
-                        line_text = line.decode("utf-8")
-                        if line_text.startswith("data: "):
-                            data_str = line_text[6:]
-                            if data_str == "[DONE]":
-                                break
-                            
-                            try:
-                                data = json.loads(data_str)
-                                if 'choices' in data and data['choices']:
-                                    delta = data['choices'][0].get('message', {})
-                                    if 'content' in delta:
-                                        content = delta['content']
-                                        full_response += content
+                result = response.json() 
+                content = result["choices"][0]["message"]["content"]
+                # task_id
+                m = re.search(r"ID:\s*`([^`]+)`", content)
+                if m:
+                    task_id = m.group(1)
 
-                                        if not task_id:
-                                            task_id_match = re.search(r"ID: `(task_[a-zA-Z0-9]+)`", full_response)
-                                            if task_id_match:
-                                                task_id = task_id_match.group(1)
-                                                print(f"Found task ID: {task_id}")
+                # 数据预览
+                m = re.search(r"$begin:math:display$数据预览$end:math:display$$begin:math:text$\(https\?\:\/\/\[\^\)\]\+\)$end:math:text$", content)
+                if m:
+                    preview_url = m.group(1)
 
-                                        if not data_preview_url and task_id:
-                                            preview_match = re.search(r"\[数据预览\]\((https://asyncdata.net/web/[^)]+)\)", full_response)
-                                            if preview_match:
-                                                data_preview_url = preview_match.group(1)
-                                                print(f"Found data preview URL: {data_preview_url}")
-                                                pbar.update_absolute(30)
-                                                break  
-                            except json.JSONDecodeError:
-                                continue
-                
-                if not task_id:
-                    error_message = "Failed to obtain task ID from the response"
-                    print(error_message)
-                    return ("", "", "", json.dumps({"status": "error", "message": error_message, "response": full_response}))
+                # 最终生成图片
+                m = re.search(r"!$begin:math:display$\.\*\?$end:math:display$$begin:math:text$\(https\?\:\/\/\[\^\)\]\+\)$end:math:text$", content)
+                if m:
+                    image_url = m.group(1)
 
                 pbar.update_absolute(60)
                 response_info =  {
                     "task_id": task_id,
                     "data_preview_url": data_preview_url,
                     "prompt": prompt,
+                    "image_url": image_url,
                     "model": model,
                     "seed": seed if seed > 0 else 0
                 }
