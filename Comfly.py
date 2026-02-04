@@ -17096,7 +17096,6 @@ class Comfly_HaoeeImage_gpt_image:
                     "data_preview_url": data_preview_url,
                     "prompt": prompt,
                     "model": model,
-                    "img_count": img_count,
                     "seed": seed if seed > 0 else 0
                 }
                 return (response_info, full_response)
