@@ -17036,6 +17036,15 @@ class Comfly_HaoeeImage_gpt_image:
                     blank_tensor = pil2tensor(blank_image)
                     return (blank_tensor, response_info)
             else:
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                }
                 response = requests.post(
                     f"{baseurl}/v1/chat/completions",
                     headers=headers,
