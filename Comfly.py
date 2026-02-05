@@ -17125,7 +17125,7 @@ class Comfly_HaoeeText:
                     "deepseek-r1",
                     "deepseek-v3.2",
                     "claude-opus-4-5-20251101",
-                    "doubao-seed-1.8",
+                    "doubao-seed-1-8-251228",
                     "qwen3-max",
                     "qwen3-vl-plus",
                     "qwen-plus",
