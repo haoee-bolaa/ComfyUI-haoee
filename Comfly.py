@@ -15227,7 +15227,7 @@ class Comfly_HaoeeVideo_MiniMax:
             }
             
             response = requests.post(
-                f"{baseurl}/api/v2/hailuo/v1/video_generation", 
+                f"{baseurl}/veo/api/v1/generate_videos", 
                 headers=headers, 
                 json=payload, 
                 timeout=self.timeout
@@ -15460,7 +15460,7 @@ class Comfly_HaoeeVideo_Sora2:
                 
                 try:
                     status_response = requests.get(
-                        f"{baseurl}/v1/videos/{task_id}",
+                        f"{baseurl}/v1/videos",
                         headers=headers,
                         timeout=self.timeout
                     )
@@ -15595,7 +15595,7 @@ class Comfly_HaoeeVideo_Kling:
                 payload["seed"] = seed
             
             response = requests.post(
-                f"{baseurl}/kling/v1/videos/image2video",
+                f"{baseurl}/kling/v1/videos/omni-video",
                 headers=headers,
                 json=payload,
                 timeout=self.timeout
@@ -17325,8 +17325,8 @@ NODE_CLASS_MAPPINGS = {
     # "Comfly_wan2_6_API": Comfly_wan2_6_API,
 
     "Comfly_Haoee_api_key": Comfly_Haoee_api_key,
-    # "Comfly_HaoeeVideo_MiniMax": Comfly_HaoeeVideo_MiniMax,
-    # "Comfly_HaoeeVideo_Sora2": Comfly_HaoeeVideo_Sora2,
+    "Comfly_HaoeeVideo_MiniMax": Comfly_HaoeeVideo_MiniMax,
+    "Comfly_HaoeeVideo_Sora2": Comfly_HaoeeVideo_Sora2,
     # "Comfly_HaoeeVideo_Kling": Comfly_HaoeeVideo_Kling,
     # "Comfly_HaoeeVideo_vidu": Comfly_HaoeeVideo_vidu,
     # "Comfly_HaoeeVideo_Veo3": Comfly_HaoeeVideo_Veo3,
@@ -17403,8 +17403,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # "Comfly_wan2_6_API": "Haoee WanX 2.6 Video",
 
     "Comfly_Haoee_api_key": "好易 API Key",
-    # "Comfly_HaoeeVideo_MiniMax": "好易 视频 MiniMax",
-    # "Comfly_HaoeeVideo_Sora2": "好易 视频 Sora2",
+    "Comfly_HaoeeVideo_MiniMax": "好易 视频 MiniMax",
+    "Comfly_HaoeeVideo_Sora2": "好易 视频 Sora2",
     # "Comfly_HaoeeVideo_Kling": "好易 视频 Kling",
     # "Comfly_HaoeeVideo_vidu": "好易 视频 Vidu",
     # "Comfly_HaoeeVideo_Veo3": "好易 视频 Veo3",
