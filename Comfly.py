@@ -17036,7 +17036,7 @@ class Comfly_HaoeeImage_gpt_image:
                     blank_tensor = pil2tensor(blank_image)
                     return (blank_tensor, response_info)
             else:
-               payload = {
+                payload = {
                     "model": model,
                     "messages": [
                         {
