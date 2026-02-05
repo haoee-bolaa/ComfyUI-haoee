@@ -17036,7 +17036,7 @@ class Comfly_HaoeeImage_gpt_image:
                     blank_tensor = pil2tensor(blank_image)
                     return (blank_tensor, response_info)
             else:
-                payload = {
+               payload = {
                     "model": model,
                     "messages": [
                         {
@@ -17051,45 +17051,60 @@ class Comfly_HaoeeImage_gpt_image:
                     json=payload,
                     timeout=self.timeout
                 )
-                print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
+                print(f"Request sent to {response.url}. "
+                    f"Response status code: {response.status_code}, "
+                    f"Response text: {response.text}")
 
                 if response.status_code != 200:
                     error_message = f"API Error: {response.status_code} - {response.text}"
                     print(error_message)
-                    return ("", "", "", json.dumps({"status": "error", "message": error_message}))
-
-                full_response = ""
-                task_id = None
-                data_preview_url = None
-                result = response.json() 
+                    blank_image = Image.new('RGB', (1024, 1024), color='white')
+                    blank_tensor = pil2tensor(blank_image)
+                    return (blank_tensor, error_message)
+                # ---------- 2. 解析返回 ----------
+                result = response.json()
                 content = result["choices"][0]["message"]["content"]
-                # task_id
-                m = re.search(r"ID:\s*`([^`]+)`", content)
-                if m:
-                    task_id = m.group(1)
+                pbar.update_absolute(40)
+                # ---------- 3. 提取图片 URL（重点修复） ----------
+                image_urls = re.findall(
+                    r"!\[.*?\]\((https?://[^)]+)\)",
+                    content
+                )
 
-                # 数据预览
-                m = re.search(r"$begin:math:display$数据预览$end:math:display$$begin:math:text$\(https\?\:\/\/\[\^\)\]\+\)$end:math:text$", content)
-                if m:
-                    preview_url = m.group(1)
+                if not image_urls:
+                    error_message = "No image URLs found in response"
+                    print(error_message)
+                    blank_image = Image.new('RGB', (1024, 1024), color='white')
+                    blank_tensor = pil2tensor(blank_image)
+                    return (blank_tensor, content)
 
-                # 最终生成图片
-                m = re.search(r"!$begin:math:display$\.\*\?$end:math:display$$begin:math:text$\(https\?\:\/\/\[\^\)\]\+\)$end:math:text$", content)
-                if m:
-                    image_url = m.group(1)
+                # ---------- 4. 下载并转 IMAGE ----------
+                generated_images = []
 
-                pbar.update_absolute(60)
-                response_info =  {
-                    "task_id": task_id,
-                    "data_preview_url": data_preview_url,
-                    "prompt": prompt,
-                    "image_url": image_url,
-                    "model": model,
-                    "seed": seed if seed > 0 else 0
-                }
-                return (response_info, full_response)
-          
-                
+                for url in image_urls:
+                    try:
+                        img_resp = requests.get(url, timeout=60)
+                        img_resp.raise_for_status()
+
+                        img = Image.open(BytesIO(img_resp.content)).convert("RGB")
+                        img_tensor = pil2tensor(img)
+                        generated_images.append(img_tensor)
+
+                    except Exception as e:
+                        print(f"[WARN] Failed to download image: {url} | {e}")
+
+                if not generated_images:
+                    error_message = "Images found but failed to download"
+                    print(error_message)
+                    blank_image = Image.new('RGB', (1024, 1024), color='white')
+                    blank_tensor = pil2tensor(blank_image)
+                    return (blank_tensor, content)
+                # ---------- 5. 合并 batch ----------
+                combined_tensor = torch.cat(generated_images, dim=0)
+                pbar.update_absolute(100)
+                # ---------- 6. 正确 RETURN ----------
+                return (combined_tensor, content)
+
         except Exception as e:
             error_message = f"Error in image generation: {str(e)}"
             print(error_message)
