@@ -16202,7 +16202,14 @@ class Comfly_HaoeeVideo_Wan:
             print(error_message)
             return (empty_video, "", json.dumps({"code": "error", "message": error_message}))
         
-
+def safe_video_adapter(video_url=None):
+    if not video_url:
+        return EmptyVideoAdapter()
+    try:
+        return ComflyVideoAdapter(video_url)
+    except Exception as e:
+        print(f"[VideoAdapter] fallback to empty video: {e}")
+        return EmptyVideoAdapter()
 class Comfly_HaoeeVideo_Doubao:
     @classmethod
     def INPUT_TYPES(cls):
@@ -16246,12 +16253,12 @@ class Comfly_HaoeeVideo_Doubao:
             
         if not self.api_key:
             error_response = {"code": "error", "message": "API key not found in Comflyapi.json"}
-            return (None, "", json.dumps(error_response))
+            return (EmptyVideoAdapter(), "", json.dumps(error_response))
     
         if image is None:
             error_message = "Image not provided"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}))
+            return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -16286,7 +16293,7 @@ class Comfly_HaoeeVideo_Doubao:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, "", json.dumps({"code": "error", "message": error_message}))
+                return (EmptyVideoAdapter(), "", json.dumps({"code": "error", "message": error_message}))
                 
             result = response.json()
             task_id = result.get("id")
@@ -16294,7 +16301,7 @@ class Comfly_HaoeeVideo_Doubao:
             if not task_id:
                 error_message = "No task ID returned from API"
                 print(error_message)
-                return (None, "", json.dumps({"code": "error", "message": error_message}))
+                return (EmptyVideoAdapter(), "", json.dumps({"code": "error", "message": error_message}))
             
             pbar.update_absolute(30)
 
@@ -16316,7 +16323,7 @@ class Comfly_HaoeeVideo_Doubao:
                     
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}))
+                        return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
                         
                     status_result = status_response.json()
                     status = status_result.get("status", "")
@@ -16327,12 +16334,12 @@ class Comfly_HaoeeVideo_Doubao:
                         video_url = status_result.get("content", {}).get("video_url")
                         if not video_url:
                             error_message = "Succeeded but no video_url in response"
-                            return (None, "", json.dumps(status_result))
+                            return (None, task_id, json.dumps({"status": "error", "message": error_message}))
                         break
                     elif status == "FAILURE":
                         fail_reason = status_result.get("fail_reason", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
-                        print(error_message)
+                        return (EmptyVideoAdapter(), task_id, json.dumps({"code": "error", "message": error_message}))
                         return (None, task_id, json.dumps({"code": "error", "message": error_message}))
                         
                 except Exception as e:
@@ -16341,7 +16348,7 @@ class Comfly_HaoeeVideo_Doubao:
             if not video_url:
                 error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
                 print(error_message)
-                return (None, task_id, json.dumps({"status": "error", "message": error_message}))
+                return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
             
             pbar.update_absolute(100)
             print(f"Video generation completed. URL: {video_url}")
@@ -16356,15 +16363,12 @@ class Comfly_HaoeeVideo_Doubao:
                 "ratio": ratio,
                 "video_url": video_url,
             }
-            
-            video_adapter = ComflyVideoAdapter(video_url)
+            video_adapter = safe_video_adapter(video_url)
             return (video_adapter, task_id, json.dumps(response_data))
             
         except Exception as e:
             error_message = f"Error generating video: {str(e)}"
-            print(error_message)
-            return (None, "", json.dumps({"code": "error", "message": error_message}))
-
+            return (EmptyVideoAdapter(), "", json.dumps({"code": "error", "message": error_message}))
 
 class Comfly_HaoeeVideo_grok:
     @classmethod
@@ -17332,7 +17336,7 @@ NODE_CLASS_MAPPINGS = {
     # "Comfly_HaoeeVideo_vidu": Comfly_HaoeeVideo_vidu,
     # "Comfly_HaoeeVideo_Veo3": Comfly_HaoeeVideo_Veo3,
     "Comfly_HaoeeVideo_Wan": Comfly_HaoeeVideo_Wan,
-    "Comfly_HaoeeVideo_grok": Comfly_HaoeeVideo_grok,
+    "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
     "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
     "Comfly_HaoeeImage_Gemini": Comfly_HaoeeImage_Gemini,
     "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
@@ -17410,7 +17414,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # "Comfly_HaoeeVideo_vidu": "好易 视频 Vidu",
     # "Comfly_HaoeeVideo_Veo3": "好易 视频 Veo3",
     "Comfly_HaoeeVideo_Wan": "好易 视频 Wan",
-    "Comfly_HaoeeVideo_grok": "好易 视频 Grok",
+    "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
     "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
     "Comfly_HaoeeImage_Gemini": "好易 绘图 Gemini",
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
