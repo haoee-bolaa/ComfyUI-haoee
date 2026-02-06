@@ -6,7 +6,7 @@ import tempfile
 import torch
 import torchaudio
 import requests
-#import nest_asyncio
+# import nest_asyncio
 import time
 import numpy as np
 from PIL import Image
@@ -30,7 +30,7 @@ from .utils import pil2tensor, tensor2pil
 from comfy.utils import common_upscale
 from comfy.comfy_types import IO
 from typing import Optional, Any
-#from comfy_api_nodes.apinode_utils import download_url_to_video_output
+# from comfy_api_nodes.apinode_utils import download_url_to_video_output
 import asyncio
 from comfy_api.input import VideoInput
 from comfy_api.input_impl import VideoFromFile
@@ -16210,7 +16210,7 @@ class Comfly_HaoeeVideo_Doubao:
             "required": {
                 "image": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["doubao-seedance-1-0-pro-250528", "doubao-seedance-1-0-lite-i2v-250428"], {"default": "doubao-seedance-1-0-pro-250528"}),
+                "model": (["doubao-seedance-1-0-pro-250528", "doubao-seedance-1-0-lite-i2v-250428", 'doubao-seedance-1-5-pro-251215', 'doubao-seedance-1-0-pro-fast-251015'], {"default": "doubao-seedance-1-0-pro-250528"}),
                 "resolution": (["480p", "720p", "1080p"], {"default": "720p"}),
                 "duration": (["5", "10"], {"default": "5"}),
                 "ratio": (["21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "9:21", "keep_ratio", "adaptive"], {"default": "16:9"}),
@@ -16275,7 +16275,7 @@ class Comfly_HaoeeVideo_Doubao:
             }
 
             response = requests.post(
-                f"{baseurl}/v2/videos/generations",
+                f"{baseurl}/volc/v1/contents/generations/tasks",
                 headers=headers,
                 json=payload,
                 timeout=self.timeout
@@ -16308,7 +16308,7 @@ class Comfly_HaoeeVideo_Doubao:
                 
                 try:
                     status_response = requests.get(
-                        f"{baseurl}/v2/videos/generations/{task_id}",
+                        f"{baseurl}/volc/v1/contents/generations/tasks/{task_id}",
                         headers=headers,
                         timeout=self.timeout
                     )
@@ -17332,7 +17332,7 @@ NODE_CLASS_MAPPINGS = {
     # "Comfly_HaoeeVideo_Veo3": Comfly_HaoeeVideo_Veo3,
     "Comfly_HaoeeVideo_Wan": Comfly_HaoeeVideo_Wan,
     "Comfly_HaoeeVideo_grok": Comfly_HaoeeVideo_grok,
-    # "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
+    "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
     "Comfly_HaoeeImage_Gemini": Comfly_HaoeeImage_Gemini,
     "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
     "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
@@ -17410,7 +17410,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # "Comfly_HaoeeVideo_Veo3": "好易 视频 Veo3",
     "Comfly_HaoeeVideo_Wan": "好易 视频 Wan",
     "Comfly_HaoeeVideo_grok": "好易 视频 Grok",
-    # "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
+    "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
     "Comfly_HaoeeImage_Gemini": "好易 绘图 Gemini",
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
     "Comfly_HaoeeImage_Doubao_Seedream": "好易 绘图 Doubao Seedream",
