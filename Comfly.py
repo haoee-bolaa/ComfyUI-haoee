@@ -16334,13 +16334,12 @@ class Comfly_HaoeeVideo_Doubao:
                         video_url = status_result.get("content", {}).get("video_url")
                         if not video_url:
                             error_message = "Succeeded but no video_url in response"
-                            return (None, task_id, json.dumps({"status": "error", "message": error_message}))
+                            return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
                         break
                     elif status == "FAILURE":
                         fail_reason = status_result.get("fail_reason", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
                         return (EmptyVideoAdapter(), task_id, json.dumps({"code": "error", "message": error_message}))
-                        return (None, task_id, json.dumps({"code": "error", "message": error_message}))
                         
                 except Exception as e:
                     print(f"Error checking generation status: {str(e)}")
