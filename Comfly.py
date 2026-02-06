@@ -16289,7 +16289,7 @@ class Comfly_HaoeeVideo_Doubao:
                 return (None, "", json.dumps({"code": "error", "message": error_message}))
                 
             result = response.json()
-            task_id = result.get("task_id")
+            task_id = result.get("id")
                 
             if not task_id:
                 error_message = "No task ID returned from API"
@@ -16323,11 +16323,12 @@ class Comfly_HaoeeVideo_Doubao:
 
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
-
                     if status == "SUCCESS":
-                        if "data" in status_result and "output" in status_result["data"]:
-                            video_url = status_result["data"]["output"]
-                            break
+                        video_url = status_result.get("content", {}).get("video_url")
+                        if not video_url:
+                            error_message = "Succeeded but no video_url in response"
+                            return (None, "", json.dumps(status_result))
+                        break
                     elif status == "FAILURE":
                         fail_reason = status_result.get("fail_reason", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
