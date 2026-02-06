@@ -15227,7 +15227,7 @@ class Comfly_HaoeeVideo_MiniMax:
             }
             
             response = requests.post(
-                f"{baseurl}/veo/api/v1/generate_videos", 
+                f"{baseurl}/api/v2/hailuo/v1/video_generation", 
                 headers=headers, 
                 json=payload, 
                 timeout=self.timeout
@@ -15238,7 +15238,7 @@ class Comfly_HaoeeVideo_MiniMax:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, "", json.dumps({"status": "error", "message": error_message}))
+                return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
                 
             result = response.json()
             task_id = result.get("task_id")
@@ -15246,7 +15246,7 @@ class Comfly_HaoeeVideo_MiniMax:
             if not task_id:
                 error_message = "错误，未获取到task_id"
                 print(error_message)
-                return (None, "", json.dumps({"status": "error", "message": error_message}))
+                return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
             
             pbar.update_absolute(30)
             print(f"Video generation task submitted. Task ID: {task_id}")
@@ -15262,7 +15262,7 @@ class Comfly_HaoeeVideo_MiniMax:
                 
                 try:
                     status_response = requests.get(
-                        f"{baseurl}/minimax/v1/query/video_generation?task_id={task_id}",
+                        f"{baseurl}/api/v2/get_task/{task_id}",
                         headers=headers,
                         timeout=self.timeout
                     )
@@ -15270,52 +15270,50 @@ class Comfly_HaoeeVideo_MiniMax:
                     
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}))
+                        return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
                         
                     status_result = status_response.json()
-                    status = status_result.get("status", "")
+                    state = status_result["data"]["state"]
                     
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
                     
-                    if status == "Success":
-                        file_id = status_result.get("file_id")
-                        if file_id:
-                            file_response = requests.get(
-                                f"{baseurl}/minimax/v1/files/retrieve?file_id={file_id}",
-                                headers=headers,
-                                timeout=self.timeout
+                    if state == "success":
+                        data = status_result.get("data", {})
+                        data_info = data.get("data_info", {}).get("data", {})
+                        video_url = None
+                        # 优先 more_file_info
+                        more_file = data_info.get("more_file_info")
+                        if more_file and "download_url" in more_file:
+                            video_url = more_file["download_url"]
+                            file_id = more_file["file_id"]
+                        # 兜底 file_info[0]
+                        if not video_url:
+                            file_list = data_info.get("file_info", [])
+                            if file_list and "file_url" in file_list[0]:
+                                video_url = file_list[0]["file_url"]
+
+                        if not video_url:
+                            return (
+                                EmptyVideoAdapter(),
+                                task_id,
+                                json.dumps(status_result, ensure_ascii=False)
                             )
-                            print(f"Request sent to {file_response.url}. Response status code: {file_response.status_code}, Response text: {file_response.text}")
-                            
-                            if file_response.status_code == 200:
-                                file_data = file_response.json()
-                                if "file" in file_data and "download_url" in file_data["file"]:
-                                    video_url = file_data["file"]["download_url"]
-                                    break
-                                else:
-                                    video_url = f"{baseurl}/minimax/v1/file?file_id={file_id}"
-                                    break
-                            else:
-                                video_url = f"{baseurl}/minimax/v1/file?file_id={file_id}"
-                                break
-                    elif status == "Failed":
+                        break
+                    elif state == "failed":
                         error_message = f"Video generation failed: {status_result.get('base_resp', {}).get('status_msg', 'Unknown error')}"
                         print(error_message)
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}))
+                        return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
                     
                 except Exception as e:
                     print(f"Error checking generation status: {str(e)}")
-            
-            if not file_id:
-                error_message = "Failed to retrieve file_id after multiple attempts"
-                print(error_message)
-                return (None, task_id, json.dumps({"status": "error", "message": error_message}))
-                
-            if not video_url:
-                video_url = f"{baseurl}/minimax/v1/file?file_id={file_id}"
-            
             pbar.update_absolute(100)
+            if not video_url:
+                return (
+                    EmptyVideoAdapter(),
+                    task_id,
+                    json.dumps(status_result, ensure_ascii=False)
+                )
             print(f"Video generation completed. URL: {video_url}")
             
             video_adapter = ComflyVideoAdapter(video_url)
@@ -15325,8 +15323,6 @@ class Comfly_HaoeeVideo_MiniMax:
                 "task_id": task_id,
                 "file_id": file_id,
                 "video_url": video_url,
-                "width": status_result.get("video_width", 0),
-                "height": status_result.get("video_height", 0)
             }
             
             return (video_adapter, task_id, json.dumps(response_data))
@@ -15336,7 +15332,7 @@ class Comfly_HaoeeVideo_MiniMax:
             print(error_message)
             import traceback
             traceback.print_exc()
-            return (None, "", json.dumps({"status": "error", "message": error_message}))
+            return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
 
 
 class Comfly_HaoeeVideo_Sora2:
