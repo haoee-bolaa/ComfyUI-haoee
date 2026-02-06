@@ -15559,12 +15559,12 @@ class Comfly_HaoeeVideo_Kling:
             
         if not self.api_key:
             error_response = {"task_status": "failed", "task_status_msg": "API key not found in Comflyapi.json"}
-            return (None, "", json.dumps(error_response))
+            return (EmptyVideoAdapter(), "", json.dumps(error_response))
 
         if image is None:
             error_message = "Image not provided"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}))
+            return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
 
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -15603,19 +15603,19 @@ class Comfly_HaoeeVideo_Kling:
             if response.status_code != 200:
                 error_message = f"Error: {response.status_code} {response.reason} - {response.text}"
                 error_response = {"task_status": "failed", "task_status_msg": error_message}
-                return (None, "", json.dumps(error_response))
+                return (EmptyVideoAdapter(), "", json.dumps(error_response))
             
             result = response.json()
             if result["code"] != 0:
                 error_response = {"task_status": "failed", "task_status_msg": f"API Error: {result['message']}"}
-                return (None, "", json.dumps(error_response))
+                return (EmptyVideoAdapter(), "", json.dumps(error_response))
                 
             task_id = result["data"]["task_id"]
             
             if not task_id:
                 error_message = "No task ID in API response"
                 print(error_message)
-                return (None, "", json.dumps({"status": "error", "message": error_message}))
+                return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
             
             pbar.update_absolute(30)
             print(f"Video generation task submitted. Task ID: {task_id}")
@@ -15630,7 +15630,7 @@ class Comfly_HaoeeVideo_Kling:
 
                 try:
                     status_response = requests.get(
-                        f"{baseurl}/kling/v1/videos/image2video/{task_id}",
+                        f"{baseurl}/kling/v1/images/omni-image/{task_id}",
                         headers=headers,
                         timeout=self.timeout
                     )
@@ -15638,7 +15638,7 @@ class Comfly_HaoeeVideo_Kling:
 
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}))
+                        return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
                         
                     status_data = status_response.json()
                     status = status_data["data"]["task_status"]
@@ -15654,7 +15654,7 @@ class Comfly_HaoeeVideo_Kling:
                         fail_reason = status_data["data"].get("task_status_msg", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
                         print(error_message)
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}))
+                        return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}))
 
                 except Exception as e:
                     print(f"Error checking task status: {str(e)}")
@@ -15662,7 +15662,7 @@ class Comfly_HaoeeVideo_Kling:
             if not video_url:
                 error_message = f"Failed to get video URL after {max_attempts} attempts"
                 print(error_message)
-                return (None, task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}))
+                return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}))
             
             video_adapter = ComflyVideoAdapter(video_url)
             
@@ -15683,7 +15683,7 @@ class Comfly_HaoeeVideo_Kling:
         except Exception as e:
             error_response = {"task_status": "failed", "task_status_msg": f"Error generating video: {str(e)}"}
             print(f"Error generating video: {str(e)}")
-            return (None, "", json.dumps(error_response))
+            return (EmptyVideoAdapter(), "", json.dumps(error_response))
 
 
 class Comfly_HaoeeVideo_vidu:
@@ -17327,11 +17327,10 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_Haoee_api_key": Comfly_Haoee_api_key,
     "Comfly_HaoeeVideo_MiniMax": Comfly_HaoeeVideo_MiniMax,
     "Comfly_HaoeeVideo_Sora2": Comfly_HaoeeVideo_Sora2,
-    # "Comfly_HaoeeVideo_Kling": Comfly_HaoeeVideo_Kling,
+    "Comfly_HaoeeVideo_Kling": Comfly_HaoeeVideo_Kling,
     # "Comfly_HaoeeVideo_vidu": Comfly_HaoeeVideo_vidu,
     # "Comfly_HaoeeVideo_Veo3": Comfly_HaoeeVideo_Veo3,
     "Comfly_HaoeeVideo_Wan": Comfly_HaoeeVideo_Wan,
-    "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
     "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
     "Comfly_HaoeeImage_Gemini": Comfly_HaoeeImage_Gemini,
     "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
@@ -17404,12 +17403,11 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 
     "Comfly_Haoee_api_key": "好易 API Key",
     "Comfly_HaoeeVideo_MiniMax": "好易 视频 MiniMax",
-    "Comfly_HaoeeVideo_Sora2": "好易 视频 Sora2",
-    # "Comfly_HaoeeVideo_Kling": "好易 视频 Kling",
+    # "Comfly_HaoeeVideo_Sora2": "好易 视频 Sora2",
+    "Comfly_HaoeeVideo_Kling": "好易 视频 Kling",
     # "Comfly_HaoeeVideo_vidu": "好易 视频 Vidu",
     # "Comfly_HaoeeVideo_Veo3": "好易 视频 Veo3",
     "Comfly_HaoeeVideo_Wan": "好易 视频 Wan",
-    "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
     "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
     "Comfly_HaoeeImage_Gemini": "好易 绘图 Gemini",
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
