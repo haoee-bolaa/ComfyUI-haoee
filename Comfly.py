@@ -15527,7 +15527,8 @@ class Comfly_HaoeeVideo_Kling:
                 "model": (["kling-video-o1", "kling-v2-6", "kling-v2-5-turbo"], {"default": "kling-v2-6"}),
                 "mode": (["std", "pro"], {"default": "std"}),
                 "duration": (["5", "10"], {"default": "5"}),
-                "api_key": ("STRING", {"default": ""})
+                "api_key": ("STRING", {"default": ""}),
+                "resolution": (["1k", "2k", "4k"], {"default": "1k"}),
             },
             "optional": {
                 "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
@@ -15553,7 +15554,7 @@ class Comfly_HaoeeVideo_Kling:
         pil_image.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode('utf-8') # kling的image不加base64前缀
 
-    def generate_video(self, image, prompt, model, mode, duration, negative_prompt="", seed=0, api_key=""):
+    def generate_video(self, image, prompt, model, mode, duration, negative_prompt="", resolution="1k", seed=0, api_key=""):
         if api_key.strip():
             self.api_key = api_key
             
@@ -15583,7 +15584,8 @@ class Comfly_HaoeeVideo_Kling:
                 "image": image_base64,
                 "duration": duration,
                 "model_name": model,
-                "mode": mode
+                "mode": mode,
+                "resolution": resolution
             }
             if model == "kling-v2-6":
                 payload["mode"] = "pro"
