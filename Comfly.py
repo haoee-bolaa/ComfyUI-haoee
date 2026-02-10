@@ -15456,7 +15456,7 @@ class Comfly_HaoeeVideo_Sora2:
                 
                 try:
                     status_response = requests.get(
-                        f"{baseurl}/v1/videos",
+                        f"{baseurl}/v1/videos/{task_id}",
                         headers=headers,
                         timeout=self.timeout
                     )
@@ -17405,7 +17405,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 
     "Comfly_Haoee_api_key": "好易 API Key",
     "Comfly_HaoeeVideo_MiniMax": "好易 视频 MiniMax",
-    # "Comfly_HaoeeVideo_Sora2": "好易 视频 Sora2",
+    "Comfly_HaoeeVideo_Sora2": "好易 视频 Sora2",
     "Comfly_HaoeeVideo_Kling": "好易 视频 Kling",
     # "Comfly_HaoeeVideo_vidu": "好易 视频 Vidu",
     # "Comfly_HaoeeVideo_Veo3": "好易 视频 Veo3",
