@@ -15527,8 +15527,8 @@ class Comfly_HaoeeVideo_Kling:
                 "model": (["kling-video-o1", "kling-v2-6", "kling-v2-5-turbo"], {"default": "kling-v2-6"}),
                 "mode": (["std", "pro"], {"default": "std"}),
                 "duration": (["5", "10"], {"default": "5"}),
-                "api_key": ("STRING", {"default": ""}),
                 "resolution": (["1k", "2k", "4k"], {"default": "1k"}),
+                "api_key": ("STRING", {"default": ""}),
             },
             "optional": {
                 "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
@@ -15591,13 +15591,20 @@ class Comfly_HaoeeVideo_Kling:
                 payload["mode"] = "pro"
             if seed > 0:
                 payload["seed"] = seed
-            
-            response = requests.post(
-                f"{baseurl}/kling/v1/videos/omni-video",
-                headers=headers,
-                json=payload,
-                timeout=self.timeout
-            )
+            if model == "kling-v2-5-turbo":
+                response = requests.post(
+                    f"{baseurl}/kling/v1/videos/image2video",
+                    headers=headers,
+                    json=payload,
+                    timeout=self.timeout
+                )
+            else:
+                response = requests.post(
+                    f"{baseurl}/kling/v1/videos/omni-video",
+                    headers=headers,
+                    json=payload,
+                    timeout=self.timeout
+                )
             
             pbar.update_absolute(20)
             print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
@@ -15632,7 +15639,7 @@ class Comfly_HaoeeVideo_Kling:
 
                 try:
                     status_response = requests.get(
-                        f"{baseurl}/kling/v1/images/omni-image/{task_id}",
+                        f"{baseurl}/kling/v1/videos/image2video/{task_id}",
                         headers=headers,
                         timeout=self.timeout
                     )
