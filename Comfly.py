@@ -16252,7 +16252,7 @@ class Comfly_HaoeeVideo_Doubao:
         base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
         return f"data:image/png;base64,{base64_str}"
     
-    def generate_video(self, prompt, model, resolution="720p", duration=5, ratio="16:9", apikey="", image=None, seed=0):
+    def generate_video(self, prompt, model, resolution="720p", duration= 5, ratio="16:9", apikey="", image=None, seed=0):
         if apikey.strip():
             self.api_key = apikey
             
@@ -16291,7 +16291,7 @@ class Comfly_HaoeeVideo_Doubao:
                     },
                 ],
                 "resolution": resolution,
-                "duration": duration,
+                "duration": int(duration),
                 "ratio": ratio,
                 "seed": seed if seed > 0 else 0
             }
@@ -16340,17 +16340,17 @@ class Comfly_HaoeeVideo_Doubao:
                         return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
                         
                     status_result = status_response.json()
-                    status = status_result.get("status", "")
+                    status = status_result.get("status", "").lower()
 
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
-                    if status == "SUCCESS":
+                    if status in ["succeeded", "success", "SUCCEEDED", "SUCCESS"]:
                         video_url = status_result.get("content", {}).get("video_url")
                         if not video_url:
                             error_message = "Succeeded but no video_url in response"
                             return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
                         break
-                    elif status == "FAILURE":
+                    elif status in ["failed", "failure", "FAILURE"]:
                         fail_reason = status_result.get("fail_reason", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
                         return (EmptyVideoAdapter(), task_id, json.dumps({"code": "error", "message": error_message}))
@@ -16372,7 +16372,7 @@ class Comfly_HaoeeVideo_Doubao:
                 "prompt": prompt,
                 "model": model,
                 "resolution": resolution,
-                "duration": duration,
+                "duration": int(duration),
                 "ratio": ratio,
                 "video_url": video_url,
             }
