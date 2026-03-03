@@ -16224,7 +16224,7 @@ class Comfly_HaoeeVideo_Doubao:
                 "prompt": ("STRING", {"multiline": True}),
                 "model": (["doubao-seedance-1-0-pro-250528", "doubao-seedance-1-0-lite-i2v-250428", 'doubao-seedance-1-5-pro-251215', 'doubao-seedance-1-0-pro-fast-251015'], {"default": "doubao-seedance-1-0-pro-250528"}),
                 "resolution": (["480p", "720p", "1080p"], {"default": "720p"}),
-                "duration": (["5", "10"], {"default": "5"}),
+                "duration": ([5, 10], {"default": 5}),
                 "ratio": (["21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "9:21", "keep_ratio", "adaptive"], {"default": "16:9"}),
                 "apikey": ("STRING", {"default": ""})
             },
@@ -16252,7 +16252,7 @@ class Comfly_HaoeeVideo_Doubao:
         base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
         return f"data:image/png;base64,{base64_str}"
     
-    def generate_video(self, prompt, model, resolution="720p", duration="5", ratio="16:9", apikey="", image=None, seed=0):
+    def generate_video(self, prompt, model, resolution="720p", duration=5, ratio="16:9", apikey="", image=None, seed=0):
         if apikey.strip():
             self.api_key = apikey
             
@@ -16295,7 +16295,6 @@ class Comfly_HaoeeVideo_Doubao:
                 "ratio": ratio,
                 "seed": seed if seed > 0 else 0
             }
-            print(f"Payload for video generation: {json.dumps(payload)}")
             response = requests.post(
                 f"{baseurl}/volc/v1/contents/generations/tasks",
                 headers=headers,
