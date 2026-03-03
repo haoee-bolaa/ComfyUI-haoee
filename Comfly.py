@@ -15412,7 +15412,6 @@ class Comfly_HaoeeVideo_Sora2:
             pbar.update_absolute(10)
 
             headers = {
-                "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
                 "modelName": model
             }
@@ -15426,14 +15425,15 @@ class Comfly_HaoeeVideo_Sora2:
                 "size": size,
                 "seed": seed if seed > 0 else 0
             }
+
             
-            response = requests.post(f"{baseurl}/v1/videos", headers=headers, json=payload, timeout=self.timeout)
+            response = requests.post(f"{baseurl}/v1/videos", headers=headers, data=payload, timeout=self.timeout)
             pbar.update_absolute(20)
             print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, "", json.dumps({"status": "error", "message": error_message}))
+                return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
                 
             result = response.json()
             task_id = result.get("id")
@@ -15441,7 +15441,7 @@ class Comfly_HaoeeVideo_Sora2:
             if not task_id:
                 error_message = "No task ID in API response"
                 print(error_message)
-                return (None, "", json.dumps({"status": "error", "message": error_message}))
+                return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
             
             pbar.update_absolute(30)
             print(f"Video generation task submitted. Task ID: {task_id}")
@@ -15464,7 +15464,7 @@ class Comfly_HaoeeVideo_Sora2:
                     
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}))
+                        return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}))
                         
                     status_data = status_response.json()
                     status = status_data.get("status")
@@ -15483,7 +15483,7 @@ class Comfly_HaoeeVideo_Sora2:
                         fail_reason = status_data.get("error", {}).get("message", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
                         print(error_message)
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}))
+                        return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}))
                         
                 except Exception as e:
                     print(f"Error checking task status: {str(e)}")
@@ -15491,7 +15491,7 @@ class Comfly_HaoeeVideo_Sora2:
             if not video_url:
                 error_message = f"Failed to get video URL after {max_attempts} attempts"
                 print(error_message)
-                return (None, task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}))
+                return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}))
             
             video_adapter = ComflyVideoAdapter(video_url)
             
@@ -15514,7 +15514,7 @@ class Comfly_HaoeeVideo_Sora2:
             print(error_message)
             import traceback
             traceback.print_exc()
-            return (None, "", json.dumps({"status": "error", "message": error_message}))
+            return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
 
 
 class Comfly_HaoeeVideo_Kling:
@@ -16278,12 +16278,34 @@ class Comfly_HaoeeVideo_Doubao:
             image_base64 = self.image_to_base64(image)
             payload = {
                 "model": model,
-                "prompt": prompt,
-                "images": [image_base64],
-                "resolution": resolution,
-                "duration": duration,
-                "ratio": ratio,
-                "seed": seed if seed > 0 else 0
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_base64
+                        }
+                    },
+                    {
+                        "type": "resolution",
+                        "resolution": resolution  
+                    },
+                    {
+                        "type": "duration",
+                        "duration": duration
+                    },
+                    {
+                        "type": "ratio",
+                        "ratio": ratio
+                    },
+                    {
+                        "type": "seed",
+                        "seed": seed if seed > 0 else 0
+                    }
+                ],
             }
 
             response = requests.post(
