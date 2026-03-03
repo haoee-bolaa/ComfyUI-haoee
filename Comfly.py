@@ -16289,25 +16289,13 @@ class Comfly_HaoeeVideo_Doubao:
                             "url": image_base64
                         }
                     },
-                    {
-                        "type": "resolution",
-                        "resolution": resolution  
-                    },
-                    {
-                        "type": "duration",
-                        "duration": duration
-                    },
-                    {
-                        "type": "ratio",
-                        "ratio": ratio
-                    },
-                    {
-                        "type": "seed",
-                        "seed": seed if seed > 0 else 0
-                    }
                 ],
+                "resolution": resolution,
+                "duration": duration,
+                "ratio": ratio,
+                "seed": seed if seed > 0 else 0
             }
-
+            print(f"Payload for video generation: {json.dumps(payload)}")
             response = requests.post(
                 f"{baseurl}/volc/v1/contents/generations/tasks",
                 headers=headers,
