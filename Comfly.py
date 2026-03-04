@@ -15417,17 +15417,26 @@ class Comfly_HaoeeVideo_Sora2:
             }
 
             image_base64 = self.image_to_base64(image)
-            payload = {
+            
+            form_data = {
                 "prompt": prompt,
                 "model": model,
-                "input_reference": image_base64,
-                "seconds": seconds,
-                "size": size,
-                "seed": seed if seed > 0 else 0
+                "seconds": str(seconds),
+                "size": size
             }
+            if seed > 0:
+                form_data["seed"] = str(seed)
 
-            
-            response = requests.post(f"{baseurl}/v1/videos", headers=headers, data=payload, timeout=self.timeout)
+            files = {
+                "input_reference": ("image.png", base64.b64decode(image_base64.split(",")[1]), "image/png")
+            }
+            response = requests.post(
+                f"{baseurl}/v1/videos",
+                headers=headers,
+                data=form_data,
+                files=files,
+                timeout=self.timeout
+            )
             pbar.update_absolute(20)
             print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
             
@@ -16215,6 +16224,7 @@ def safe_video_adapter(video_url=None):
     except Exception as e:
         print(f"[VideoAdapter] fallback to empty video: {e}")
         return EmptyVideoAdapter()
+    
 class Comfly_HaoeeVideo_Doubao:
     @classmethod
     def INPUT_TYPES(cls):
@@ -16222,7 +16232,12 @@ class Comfly_HaoeeVideo_Doubao:
             "required": {
                 "image": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["doubao-seedance-1-0-pro-250528", "doubao-seedance-1-0-lite-i2v-250428", 'doubao-seedance-1-5-pro-251215', 'doubao-seedance-1-0-pro-fast-251015'], {"default": "doubao-seedance-1-0-pro-250528"}),
+                "model": ([
+                    "doubao-seedance-1-0-pro-250528",
+                    "doubao-seedance-1-0-lite-i2v-250428",
+                    "doubao-seedance-1-5-pro-251215",
+                    "doubao-seedance-1-0-pro-fast-251015"
+                ], {"default": "doubao-seedance-1-0-pro-250528"}),
                 "resolution": (["480p", "720p", "1080p"], {"default": "720p"}),
                 "duration": ([5, 10], {"default": 5}),
                 "ratio": (["21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "9:21", "keep_ratio", "adaptive"], {"default": "16:9"}),
@@ -16232,39 +16247,39 @@ class Comfly_HaoeeVideo_Doubao:
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647})
             }
         }
-    
+
     RETURN_TYPES = (IO.VIDEO, "STRING", "STRING")
     RETURN_NAMES = ("video", "task_id", "response")
     FUNCTION = "generate_video"
     CATEGORY = "好易/Video"
 
     def __init__(self):
-        self.timeout = 300
-    
+        self.timeout = 30  # GET 轮询超时，避免300秒阻塞
+        self.api_key = None
+
     def image_to_base64(self, image_tensor):
         """Convert tensor to base64 string with data URI prefix"""
         if image_tensor is None:
             return None
-            
         pil_image = tensor2pil(image_tensor)[0]
         buffered = BytesIO()
         pil_image.save(buffered, format="PNG")
         base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
         return f"data:image/png;base64,{base64_str}"
-    
-    def generate_video(self, prompt, model, resolution="720p", duration= 5, ratio="16:9", apikey="", image=None, seed=0):
+
+    def generate_video(self, prompt, model, resolution="720p", duration=5, ratio="16:9", apikey="", image=None, seed=0):
         if apikey.strip():
             self.api_key = apikey
-            
+
         if not self.api_key:
             error_response = {"code": "error", "message": "API key not found in Comflyapi.json"}
             return (EmptyVideoAdapter(), "", json.dumps(error_response))
-    
+
         if image is None:
             error_message = "Image not provided"
             print(error_message)
             return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
-            
+
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
@@ -16279,22 +16294,17 @@ class Comfly_HaoeeVideo_Doubao:
             payload = {
                 "model": model,
                 "content": [
-                    {
-                        "type": "text",
-                        "text": prompt
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": image_base64
-                        }
-                    },
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": image_base64}}
                 ],
                 "resolution": resolution,
                 "duration": int(duration),
-                "ratio": ratio,
-                "seed": seed if seed > 0 else 0
+                "ratio": ratio
             }
+
+            if seed > 0:
+                payload["seed"] = seed
+
             response = requests.post(
                 f"{baseurl}/volc/v1/contents/generations/tasks",
                 headers=headers,
@@ -16303,69 +16313,70 @@ class Comfly_HaoeeVideo_Doubao:
             )
 
             pbar.update_absolute(20)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
-            
+            # print(f"Request sent to {response.url}. Status code: {response.status_code}, Response: {response.text}")
+
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
                 return (EmptyVideoAdapter(), "", json.dumps({"code": "error", "message": error_message}))
-                
-            result = response.json()
-            task_id = result.get("id")
-                
-            if not task_id:
-                error_message = "No task ID returned from API"
-                print(error_message)
-                return (EmptyVideoAdapter(), "", json.dumps({"code": "error", "message": error_message}))
-            
-            pbar.update_absolute(30)
 
-            max_attempts = 60  
+            result = response.json()
+            print(f"result: {result}")
+
+            task_id = result.get("id")
+            video_url = result.get("content", {}).get("video_url")  # POST 同步返回
+
+            # 如果同步返回 video_url，直接返回
+            if video_url:
+                pbar.update_absolute(100)
+                print(f"Video generated (sync). URL: {video_url}")
+                video_adapter = safe_video_adapter(video_url)
+                return (video_adapter, task_id, json.dumps(result))
+
+            # 如果 video_url 没有返回，则进入轮询（异步模型）
+            pbar.update_absolute(30)
+            max_attempts = 60
             attempts = 0
-            video_url = None
-            
+
             while attempts < max_attempts:
                 time.sleep(10)
                 attempts += 1
-                
+
                 try:
                     status_response = requests.get(
                         f"{baseurl}/volc/v1/contents/generations/tasks/{task_id}",
                         headers=headers,
                         timeout=self.timeout
                     )
-                    print(f"Request sent to {status_response.url}. Response status code: {status_response.status_code}, Response text: {status_response.text}")
-                    
+                    print(f"Status check ({attempts}): {status_response.status_code}, Response: {status_response.text}")
+
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
                         return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
-                        
                     status_result = status_response.json()
+                    print(f"Response: {status_result}")
                     status = status_result.get("status", "").lower()
+                    video_url = status_result.get("content", {}).get("video_url")
 
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
-                    if status in ["succeeded", "success", "SUCCEEDED", "SUCCESS"]:
-                        video_url = status_result.get("content", {}).get("video_url")
-                        if not video_url:
-                            error_message = "Succeeded but no video_url in response"
-                            return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
+
+                    if status in ["succeeded", "success"] and video_url:
+                        print(f"Video generated (async). URL: {video_url}")
                         break
-                    elif status in ["failed", "failure", "FAILURE"]:
+                    elif status in ["failed", "failure"]:
                         fail_reason = status_result.get("fail_reason", "Unknown error")
-                        error_message = f"Video generation failed: {fail_reason}"
-                        return (EmptyVideoAdapter(), task_id, json.dumps({"code": "error", "message": error_message}))
-                        
+                        return (EmptyVideoAdapter(), task_id, json.dumps({"code": "error", "message": f"Video generation failed: {fail_reason}"}))
+
                 except Exception as e:
                     print(f"Error checking generation status: {str(e)}")
-            
+
             if not video_url:
                 error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
                 print(error_message)
                 return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
-            
+
             pbar.update_absolute(100)
-            print(f"Video generation completed. URL: {video_url}")
-            
+            video_adapter = safe_video_adapter(video_url)
             response_data = {
                 "code": "success",
                 "task_id": task_id,
@@ -16374,11 +16385,10 @@ class Comfly_HaoeeVideo_Doubao:
                 "resolution": resolution,
                 "duration": int(duration),
                 "ratio": ratio,
-                "video_url": video_url,
+                "video_url": video_url
             }
-            video_adapter = safe_video_adapter(video_url)
             return (video_adapter, task_id, json.dumps(response_data))
-            
+
         except Exception as e:
             error_message = f"Error generating video: {str(e)}"
             return (EmptyVideoAdapter(), "", json.dumps({"code": "error", "message": error_message}))
