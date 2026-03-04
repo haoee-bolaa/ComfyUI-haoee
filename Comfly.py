@@ -15400,12 +15400,12 @@ class Comfly_HaoeeVideo_Sora2:
         if (width, height) not in [(1280, 720), (720, 1280), (1024, 1792), (1792, 1024)]:
             error_message = "图片尺寸必须为 1280x720, 720x1280, 1024x1792, or 1792x1024"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}))
+            return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
 
         if model == "sora-2" and size not in ["720x1280", "1280x720"]:
             error_message = "sora-2模型只支持720x1280和1280x720尺寸"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}))
+            return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
         
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -15422,11 +15422,9 @@ class Comfly_HaoeeVideo_Sora2:
                 "prompt": prompt,
                 "model": model,
                 "seconds": str(seconds),
-                "size": size
+                "size": str(size),
+                # "seed": seed if seed > 0 else 0
             }
-            if seed > 0:
-                form_data["seed"] = str(seed)
-
             files = {
                 "input_reference": ("image.png", base64.b64decode(image_base64.split(",")[1]), "image/png")
             }
@@ -17158,7 +17156,7 @@ class Comfly_HaoeeText:
                     "qwen3-vl-plus",
                     "qwen-plus",
                     "gemini-3-pro-preview",
-                    # "gpt-5.2",
+                    "gpt-5.2",
                     #"gpt-5.2-pro",
                     "glm-4.7",
                     "glm-4.7-flash",
