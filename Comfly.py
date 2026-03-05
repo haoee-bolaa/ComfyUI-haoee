@@ -17180,6 +17180,177 @@ class Comfly_HaoeeImage_gpt_image:
             return (blank_tensor, error_message)
 
 
+class Comfly_HaoeeImage_Midjourney:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "prompt": ("STRING", {"multiline": True}),
+                "botType": (["MID_JOURNEY", "NIJI_JOURNEY"],{"default":"MID_JOURNEY"}),
+                "apikey": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "image1": ("IMAGE",),
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+                "image4": ("IMAGE",),
+                "state": ("STRING", {"default": ""}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647})  
+            }
+        }
+    
+    RETURN_TYPES = ("IMAGE", "STRING", "STRING")
+    RETURN_NAMES = ("image", "response", "image_url")
+    FUNCTION = "generate_image"
+    CATEGORY = "好易/Image"
+
+    def __init__(self):
+        self.timeout = 600
+    
+    def image_to_base64(self, image_tensor):
+        """Convert tensor to base64 string with data URI prefix"""
+        if image_tensor is None:
+            return None
+            
+        pil_image = tensor2pil(image_tensor)[0]
+        buffered = BytesIO()
+        pil_image.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode('utf-8')
+    
+    def generate_image(self, prompt, botType="MID_JOURNEY", image1=None, image2=None, image3=None, image4=None, state="", apikey="", seed=0):
+        if apikey.strip():
+            self.api_key = apikey
+            
+        if not self.api_key:
+            error_message = "API key not found"
+            print(error_message)
+            blank_image = Image.new('RGB', (1024, 1024), color='white')
+            blank_tensor = pil2tensor(blank_image)
+            return (blank_tensor, error_message, "")
+            
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "modelName": "mj_imagine"
+            }
+
+            all_images = [image1, image2, image3, image4]
+            base64_images = [self.image_to_base64(img) for img in all_images if img is not None]
+            img_count = len(base64_images)
+            print(f"Processing {img_count} input images")
+
+            payload = {
+                "prompt": prompt,
+                "botType": botType,
+                "base64Array": base64_images,
+                "state": state,
+                "seed": seed if seed > 0 else 0
+            }
+                        
+            response = requests.post(
+                f"{baseurl}/mj/submit/imagine",
+                headers=headers,
+                json=payload,
+                timeout=self.timeout
+            )
+            
+            pbar.update_absolute(30)
+            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
+            
+            if response.status_code != 200:
+                error_message = f"API Error: {response.status_code} - {response.text}"
+                blank_image = Image.new('RGB', (1024, 1024), color='white')
+                blank_tensor = pil2tensor(blank_image)
+                return (blank_tensor, error_message, "")
+                
+            result = response.json()
+            task_id = result.get("result")
+                
+            if not task_id:
+                error_message = "No task ID returned from API"
+                print(error_message)
+                return (blank_tensor, error_message, "")
+            
+            pbar.update_absolute(40)
+
+            max_attempts = 60  
+            attempts = 0
+            imageUrl = None
+            
+            while attempts < max_attempts:
+                time.sleep(10)
+                attempts += 1
+                
+                try:
+                    query_payload = {
+                        "ids": [task_id]
+                    }
+
+                    status_response = requests.get(
+                        f"{baseurl}/mj/task/list-by-condition",
+                        headers=headers,
+                        json=query_payload,
+                        timeout=self.timeout
+                    )
+                    print(f"Request sent to {status_response.url}. Response status code: {status_response.status_code}, Response text: {status_response.text}")
+                    
+                    if status_response.status_code != 200:
+                        error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
+                        return (blank_tensor, task_id, json.dumps({"status": "error", "message": error_message}))
+                        
+                    status_result = status_response.json()
+                    status = status_result.get("status", "")
+
+                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    pbar.update_absolute(progress_value)
+
+                    if status == "SUCCESS":
+                        imageUrl = status_result.get("imageUrl")
+                        break
+                except Exception as e:
+                    print(f"Error checking generation status: {str(e)}")
+            
+            if not imageUrl:
+                error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
+                print(error_message)
+                return (blank_tensor, task_id, json.dumps({"status": "error", "message": error_message}))
+              
+
+            try:
+                img_response = requests.get(imageUrl, timeout=self.timeout)
+                img_response.raise_for_status()
+                image_data = BytesIO(img_response.content)
+                
+                pil_image = Image.open(image_data)
+                tensor_image = pil2tensor(pil_image)
+            except Exception as e:
+                print(f"Error downloading image: {str(e)}")
+                
+            pbar.update_absolute(100)
+
+            response_info = {
+                "prompt": prompt,
+                "botType": botType,
+                "state": state,
+                "seed": seed if seed != -1 else "auto",
+                "imageUrl": imageUrl
+            }
+
+            return (tensor_image, response_info, "")
+            
+        except Exception as e:
+            error_message = f"Error in image generation: {str(e)}"
+            print(error_message)
+            import traceback
+            traceback.print_exc()
+            blank_image = Image.new('RGB', (1024, 1024), color='white')
+            blank_tensor = pil2tensor(blank_image)
+            return (blank_tensor, error_message, "")
+
 class Comfly_HaoeeText:
     def __init__(self):
         self.timeout = 300
@@ -17403,6 +17574,7 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_HaoeeImage_Gemini": Comfly_HaoeeImage_Gemini,
     "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
     "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
+    "Comfly_HaoeeImage_Midjourney": Comfly_HaoeeImage_Midjourney,
     "Comfly_HaoeeText": Comfly_HaoeeText
 }
 
@@ -17481,6 +17653,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeImage_Gemini": "好易 绘图 Gemini",
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
     "Comfly_HaoeeImage_Doubao_Seedream": "好易 绘图 Doubao Seedream",
+    "Comfly_HaoeeImage_Midjourney": "好易 绘图 Midjourney",
     "Comfly_HaoeeText": "好易 LLM",
 }
 
