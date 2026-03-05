@@ -15556,8 +15556,6 @@ class Comfly_HaoeeVideo_Sora2:
 class Comfly_HaoeeVideo_Kling:
     @classmethod 
     def INPUT_TYPES(cls):
-        def show(param):
-            return lambda x: cls.MODEL_CONFIG.get(x["model"], {}).get(param, False)
         return {
             "required": {
                 "image": ("IMAGE",),
@@ -15570,8 +15568,8 @@ class Comfly_HaoeeVideo_Kling:
             "optional": {
                 "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
-                "mode": (["std", "pro"],{"default": "std", "visible": lambda x: x.get("model") == "kling-video-o1"}),
-                "aspect_ratio": (["auto", "16:9", "4:3", "4:5", "3:2", "1:1", "2:3", "3:4", "5:4", "9:16", "21:9"],{"default": "auto", "visible": show("aspect_ratio")})
+                "mode": (["std", "pro"],{"default": "std"}),
+                "aspect_ratio": (["auto", "16:9", "4:3", "4:5", "3:2", "1:1", "2:3", "3:4", "5:4", "9:16", "21:9"],{"default": "auto"}),
             }
         }
 
@@ -15620,17 +15618,19 @@ class Comfly_HaoeeVideo_Kling:
             payload = {
                 "prompt": prompt,
                 "negative_prompt": negative_prompt,
-                "image": image_base64,
                 "duration": duration,
                 "model_name": model,
-                "resolution": resolution
-
             }
             if model == "kling-video-o1":
                 payload["mode"] = mode
+                payload["image_list"] = [
+                    { "image": image_base64 }
+                ]
                 payload["aspect_ratio"] = aspect_ratio
                 payload["sound"] = False # kling-video-o1默认不带声音，其他模型默认带声音，所以只要是kling-video-o1就强制sound=false
-
+            else:
+                payload["image"] = image_base64
+                payload["resolution"] = resolution
             if seed > 0:
                 payload["seed"] = seed
             if model == "kling-video-o1":
