@@ -15453,12 +15453,12 @@ class Comfly_HaoeeVideo_Sora2:
             pbar.update_absolute(30)
             print(f"Video generation task submitted. Task ID: {task_id}")
 
-            max_attempts = 60  
+            max_attempts = 80  
             attempts = 0
             video_url = None
             
             while attempts < max_attempts:
-                time.sleep(10)
+                time.sleep(5)
                 attempts += 1
                 
                 try:
@@ -15481,11 +15481,40 @@ class Comfly_HaoeeVideo_Sora2:
                     
                     #queued、success、in_progress、failed、completed
                     if status == "completed":
-                        video_response = requests.get(f"{baseurl}/v1/videos/{task_id}/content", headers=headers, timeout=self.timeout)
-                        video_response.raise_for_status()
-                        video_data = video_response.json()
-                        video_url = video_data.get("url")
-                        break
+                        content_response = requests.get(
+                            f"{baseurl}/v1/videos/{task_id}/content",
+                            headers=headers,
+                            stream=True,
+                            timeout=self.timeout
+                        )
+                        content_type = content_response.headers.get("Content-Type", "")
+                        # 如果是视频流
+                        if "video" in content_type or "octet-stream" in content_type:
+                            output_dir = folder_paths.get_output_directory()
+                            filename = f"sora_{uuid.uuid4().hex}.mp4"
+                            file_path = os.path.join(output_dir, filename)
+                            with open(file_path, "wb") as f:
+                                for chunk in content_response.iter_content(8192):
+                                    if chunk:
+                                        f.write(chunk)
+                            print("Video saved:", file_path)
+                            video_url = file_path
+                            break
+                        # 如果是 JSON
+                        else:
+                            try:
+                                content_data = content_response.json()
+                                video_url = content_data.get("url", "")
+                            except:
+                                video_url = ""
+
+                            if video_url:
+                                print("Video URL ready:", video_url)
+                                break
+                            else:
+                                print("Content not ready, waiting 3s...")
+                                time.sleep(3)
+                                waited += 3
                     elif status == "failed":
                         fail_reason = status_data.get("error", {}).get("message", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
@@ -15532,17 +15561,27 @@ class Comfly_HaoeeVideo_Kling:
                 "image": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True}),
                 "model": (["kling-video-o1", "kling-video-v2-6", "kling-v2-5-turbo", "kling-v2-1-master"], {"default": "kling-video-v2-6"}),
-                if 'model' == 'kling-video-o1':
-                    "mode": (["std", "pro"], {"default": "std"}),
-                    "aspect_ratio": (["auto", "16:9", "4:3", "4:5", "3:2", "1:1", "2:3", "3:4", "5:4", "9:16", "21:9"], {"default": "auto"}),
-
                 "duration": (["5", "10"], {"default": "5"}),
                 "resolution": (["1k", "2k", "4k"], {"default": "1k"}),
                 "api_key": ("STRING", {"default": ""}),
             },
             "optional": {
                 "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647})
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
+                "mode": (
+                    ["std", "pro"],
+                    {
+                        "default": "std",
+                        # "visible": lambda x: x.get("model") == "kling-video-o1"
+                    }
+                ),
+                "aspect_ratio": (
+                    ["auto", "16:9", "4:3", "4:5", "3:2", "1:1", "2:3", "3:4", "5:4", "9:16", "21:9"],
+                    {
+                        "default": "auto",
+                        # "visible": lambda x: x.get("model") == "kling-video-o1"
+                    }
+                )
             }
         }
 
@@ -15564,7 +15603,7 @@ class Comfly_HaoeeVideo_Kling:
         pil_image.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode('utf-8') # kling的image不加base64前缀
 
-    def generate_video(self, image, prompt, model, mode, aspect_ratio, duration, negative_prompt="", resolution="1k", seed=0, api_key=""):
+    def generate_video(self, image, prompt, model, duration, resolution, api_key, negative_prompt="", seed=0, mode="std", aspect_ratio="auto"):
         if api_key.strip():
             self.api_key = api_key
             
@@ -15595,6 +15634,7 @@ class Comfly_HaoeeVideo_Kling:
                 "duration": duration,
                 "model_name": model,
                 "resolution": resolution
+
             }
             if model == "kling-video-o1":
                 payload["mode"] = mode
@@ -15701,7 +15741,7 @@ class Comfly_HaoeeVideo_Kling:
                 "status": "success",
                 "task_id": task_id,
                 "prompt": prompt,
-                "model": model,
+                "model_name": model,
                 "duration": duration,
                 "mode": mode,
                 "video_url": video_url
@@ -16441,7 +16481,7 @@ class Comfly_HaoeeVideo_grok:
         return f"data:image/png;base64,{base64_str}"
     
     def generate_video(self, prompt, model="grok-video-3", aspect_ratio="2:3", size="720P", apikey="", image=None, seed=0):
-        empty_video = ComflyVideoAdapter("")
+        empty_video = ComflyVideoAdapter("")         
         if apikey.strip():
             self.api_key = apikey
             
