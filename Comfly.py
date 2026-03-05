@@ -15531,8 +15531,11 @@ class Comfly_HaoeeVideo_Kling:
             "required": {
                 "image": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["kling-video-o1", "kling-v2-6", "kling-v2-5-turbo"], {"default": "kling-v2-6"}),
-                "mode": (["std", "pro"], {"default": "std"}),
+                "model": (["kling-video-o1", "kling-video-v2-6", "kling-v2-5-turbo", "kling-v2-1-master"], {"default": "kling-video-v2-6"}),
+                if 'model' == 'kling-video-o1':
+                    "mode": (["std", "pro"], {"default": "std"}),
+                    "aspect_ratio": (["auto", "16:9", "4:3", "4:5", "3:2", "1:1", "2:3", "3:4", "5:4", "9:16", "21:9"], {"default": "auto"}),
+
                 "duration": (["5", "10"], {"default": "5"}),
                 "resolution": (["1k", "2k", "4k"], {"default": "1k"}),
                 "api_key": ("STRING", {"default": ""}),
@@ -15561,7 +15564,7 @@ class Comfly_HaoeeVideo_Kling:
         pil_image.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode('utf-8') # kling的image不加base64前缀
 
-    def generate_video(self, image, prompt, model, mode, duration, negative_prompt="", resolution="1k", seed=0, api_key=""):
+    def generate_video(self, image, prompt, model, mode, aspect_ratio, duration, negative_prompt="", resolution="1k", seed=0, api_key=""):
         if api_key.strip():
             self.api_key = api_key
             
@@ -15591,27 +15594,30 @@ class Comfly_HaoeeVideo_Kling:
                 "image": image_base64,
                 "duration": duration,
                 "model_name": model,
-                "mode": mode,
                 "resolution": resolution
             }
-            if model == "kling-v2-6":
-                payload["mode"] = "pro"
+            if model == "kling-video-o1":
+                payload["mode"] = mode
+                payload["aspect_ratio"] = aspect_ratio
+                payload["sound"] = False # kling-video-o1默认不带声音，其他模型默认带声音，所以只要是kling-video-o1就强制sound=false
+
             if seed > 0:
                 payload["seed"] = seed
-            if model == "kling-v2-5-turbo":
-                response = requests.post(
-                    f"{baseurl}/kling/v1/videos/image2video",
-                    headers=headers,
-                    json=payload,
-                    timeout=self.timeout
-                )
-            else:
+            if model == "kling-video-o1":
                 response = requests.post(
                     f"{baseurl}/kling/v1/videos/omni-video",
                     headers=headers,
                     json=payload,
                     timeout=self.timeout
                 )
+            else:
+                response = requests.post(
+                    f"{baseurl}/kling/v1/videos/image2video",
+                    headers=headers,
+                    json=payload,
+                    timeout=self.timeout
+                )
+                
             
             pbar.update_absolute(20)
             print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
@@ -15645,11 +15651,18 @@ class Comfly_HaoeeVideo_Kling:
                 attempts += 1
 
                 try:
-                    status_response = requests.get(
-                        f"{baseurl}/kling/v1/videos/image2video/{task_id}",
-                        headers=headers,
-                        timeout=self.timeout
-                    )
+                    if model == "kling-video-o1":
+                        status_response = requests.get(
+                            f"{baseurl}/kling/v1/images/omni-image/{task_id}",
+                            headers=headers,
+                            timeout=self.timeout
+                        )
+                    else:     
+                        status_response = requests.get(
+                            f"{baseurl}/kling/v1/videos/image2video/{task_id}",
+                            headers=headers,
+                            timeout=self.timeout
+                        )
                     print(f"Request sent to {status_response.url}. Response status code: {status_response.status_code}, Response text: {status_response.text}")
 
                     if status_response.status_code != 200:
