@@ -17630,11 +17630,11 @@ class Comfly_HaoeeText2:
                 print(error_message)
                 return ("", error_message)
 
-            response_info = {
+            response_info = json.dumps({
                 "prompt": prompt,
                 "model": model,
-            }
-
+            }, ensure_ascii=False, indent=2)
+            
             return (prompt_result, response_info)
 
         except Exception as e:
