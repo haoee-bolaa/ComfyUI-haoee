@@ -15636,7 +15636,7 @@ class Comfly_HaoeeVideo_Kling:
 
             if model == "kling-video-o1":
                 payload.update({
-                    "image_list": [{"image": image_base64}],
+                    "image_list": [{"image_url": image_base64}],
                     "mode": mode,
                     "aspect_ratio": aspect_ratio,
                     "sound": sound
