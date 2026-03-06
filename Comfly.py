@@ -17239,7 +17239,8 @@ class Comfly_HaoeeImage_Midjourney:
         pil_image = tensor2pil(image_tensor)[0]
         buffered = BytesIO()
         pil_image.save(buffered, format="PNG")
-        return base64.b64encode(buffered.getvalue()).decode('utf-8')
+        base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        return f"data:image/png;base64,{base64_str}"
     
     def generate_image(self, prompt, botType="MID_JOURNEY", image1=None, image2=None, image3=None, image4=None, state="", apikey="", seed=0):
         if apikey.strip():
@@ -17301,7 +17302,7 @@ class Comfly_HaoeeImage_Midjourney:
             
             pbar.update_absolute(40)
 
-            max_attempts = 60  
+            max_attempts = 10  
             attempts = 0
             imageUrl = None
             
@@ -17327,14 +17328,21 @@ class Comfly_HaoeeImage_Midjourney:
                         return (blank_tensor, task_id, json.dumps({"status": "error", "message": error_message}))
                         
                     status_result = status_response.json()
-                    status = (status_result[0] if status_result else {}).get("status", "")
+                    status_data = status_result[0] if status_result else {}
+                    status = status_data.get("status", "")
 
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
 
                     if status == "SUCCESS":
-                        imageUrl = status_result.get("imageUrl")
+                        imageUrl = status_data.get("imageUrl")
                         break
+                    elif status == "FAILURE":
+                        fail_reason = status_result.get("fail_reason", "Unknown error")
+                        error_message = f"Image generation failed: {fail_reason}"
+                        print(error_message)
+                        return (blank_tensor, task_id, json.dumps({"status": "error", "message": error_message}))
+                    
                 except Exception as e:
                     print(f"Error checking generation status: {str(e)}")
             
