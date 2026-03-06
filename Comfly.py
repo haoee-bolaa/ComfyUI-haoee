@@ -17327,7 +17327,7 @@ class Comfly_HaoeeImage_Midjourney:
                         return (blank_tensor, task_id, json.dumps({"status": "error", "message": error_message}))
                         
                     status_result = status_response.json()
-                    status = status_result.get("status", "")
+                    status = (status_result[0] if status_result else {}).get("status", "")
 
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
