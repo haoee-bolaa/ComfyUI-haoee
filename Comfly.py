@@ -15559,6 +15559,7 @@ class Comfly_HaoeeVideo_Kling:
         return {
             "required": {
                 "image": ("IMAGE",),
+                "image_tail": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True}),
                 "model": (["kling-video-o1", "kling-v2-6", "kling-video-v2-5-turbo", "kling-v2-1-master"], {"default": "kling-v2-6"}),
                 "duration": (["5", "10"], {"default": "5"}),
@@ -15592,7 +15593,7 @@ class Comfly_HaoeeVideo_Kling:
         pil_image.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode('utf-8') # kling的image不加base64前缀
 
-    def generate_video(self, image, prompt, model, duration, resolution, api_key, negative_prompt="", seed=0, **kwargs):
+    def generate_video(self, image, image_tail=None, prompt, model, duration, resolution, api_key, negative_prompt="", seed=0, **kwargs):
         if api_key.strip():
             self.api_key = api_key
             
@@ -15652,6 +15653,8 @@ class Comfly_HaoeeVideo_Kling:
 
                 if model == "kling-v2-6":
                     payload["sound"] = sound
+                    payload['image_tail'] = self.image_to_base64(image_tail) if image_tail is not None else None
+
             
             if seed > 0:
                 payload["seed"] = seed
@@ -17546,7 +17549,7 @@ class Comfly_HaoeeText2:
                 "apikey": ("STRING", {"default": ""}),
             },
             "optional": {
-                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
+                
             }
         }
 
@@ -17555,18 +17558,8 @@ class Comfly_HaoeeText2:
     FUNCTION = "completions"
     CATEGORY = "好易/Text"
 
-    def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/png;base64,{image_base64}"
 
-    def completions(self, apikey, model, prompt, temperature, seed=0 ):
+    def completions(self, apikey, model, prompt, temperature, ):
         if apikey.strip():
             self.api_key = apikey
             
@@ -17590,7 +17583,6 @@ class Comfly_HaoeeText2:
             payload = {
                 "model": model,
                 "input": content,
-                "seed": seed if seed > 0 else 0
             }
             
             response = requests.post(
@@ -17630,7 +17622,6 @@ class Comfly_HaoeeText2:
             response_info = {
                 "prompt": prompt,
                 "model": model,
-                "seed": seed if seed > 0 else 0
             }
 
             return (prompt_result, response_info)
