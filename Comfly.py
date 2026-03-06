@@ -15560,7 +15560,7 @@ class Comfly_HaoeeVideo_Kling:
             "required": {
                 "image": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["kling-video-o1", "kling-video-v2-6", "kling-video-v2-5-turbo", "kling-v2-1-master"], {"default": "kling-video-v2-6"}),
+                "model": (["kling-video-o1", "kling-v2-6", "kling-video-v2-5-turbo", "kling-v2-1-master"], {"default": "kling-v2-6"}),
                 "duration": (["5", "10"], {"default": "5"}),
                 "resolution": (["1k", "2k", "4k"], {"default": "1k"}),
                 "api_key": ("STRING", {"default": ""}),
@@ -15618,7 +15618,7 @@ class Comfly_HaoeeVideo_Kling:
             image_base64 = self.image_to_base64(image)
             model_map = {
                 "kling-video-o1": "kling-video-o1",
-                "kling-video-v2-6": "kling-v2-6",
+                "kling-v2-6": "kling-v2-6",
                 "kling-video-v2-5-turbo": "kling-v2-5-turbo",
                  "kling-v2-1-master":  "kling-v2-1-master"
             }
@@ -15639,7 +15639,7 @@ class Comfly_HaoeeVideo_Kling:
                     "image_list": [{"image": image_base64}],
                     "mode": mode,
                     "aspect_ratio": aspect_ratio,
-                    "sound": sound_bool
+                    "sound": sound
                 })
             else:
                 payload["image"] = image_base64
@@ -15651,7 +15651,7 @@ class Comfly_HaoeeVideo_Kling:
                     payload["mode"] = mode
 
                 if model == "kling-video-v2-6":
-                    payload["sound"] = sound_bool
+                    payload["sound"] = sound
             
             if seed > 0:
                 payload["seed"] = seed
