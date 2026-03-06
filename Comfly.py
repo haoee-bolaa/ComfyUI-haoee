@@ -15560,7 +15560,7 @@ class Comfly_HaoeeVideo_Kling:
             "required": {
                 "image": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["kling-video-o1", "kling-video-v2-6", "kling-v2-5-turbo", "kling-v2-1-master"], {"default": "kling-video-v2-6"}),
+                "model": (["kling-video-o1", "kling-video-v2-6", "kling-video-v2-5-turbo", "kling-v2-1-master"], {"default": "kling-video-v2-6"}),
                 "duration": (["5", "10"], {"default": "5"}),
                 "resolution": (["1k", "2k", "4k"], {"default": "1k"}),
                 "api_key": ("STRING", {"default": ""}),
@@ -15616,10 +15616,10 @@ class Comfly_HaoeeVideo_Kling:
 
             image_base64 = self.image_to_base64(image)
             payload = {
+                "model_name": model,
                 "prompt": prompt,
                 "negative_prompt": negative_prompt,
                 "duration": duration,
-                "model_name": model,
             }
             if model == "kling-video-o1":
                 payload["mode"] = mode
@@ -15627,12 +15627,23 @@ class Comfly_HaoeeVideo_Kling:
                     { "image": image_base64 }
                 ]
                 payload["aspect_ratio"] = aspect_ratio
-                payload["sound"] = False # kling-video-o1默认不带声音，其他模型默认带声音，所以只要是kling-video-o1就强制sound=false
+                payload["sound"] = 'off' # kling-video-o1默认不带声音，其他模型默认带声音，所以只要是kling-video-o1就强制sound=false
             else:
                 payload["image"] = image_base64
                 payload["resolution"] = resolution
+        
+                if model == "kling-video-v2-5-turbo": 
+                    payload["model_name"] = "kling-v2-5-turbo" # 兼容老版本api，虽然现在kling-video-v2-5-turbo和kling-v2-5-turbo是同一个模型，但老版本api只认kling-v2-5-turbo这个名字
+                    payload["mode"] = mode
+                if model== "kling-video-v2-6":
+                    payload["model_name"] = "kling-v2-6" # 同上,老版本api只认kling-v2-6这个名字
+                    payload["mode"] = mode
+            
+
             if seed > 0:
                 payload["seed"] = seed
+
+            print(f"use model {model}. payload {payload}")
             if model == "kling-video-o1":
                 response = requests.post(
                     f"{baseurl}/kling/v1/videos/omni-video",
@@ -15648,7 +15659,6 @@ class Comfly_HaoeeVideo_Kling:
                     timeout=self.timeout
                 )
                 
-            
             pbar.update_absolute(20)
             print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
 
