@@ -17302,7 +17302,7 @@ class Comfly_HaoeeImage_Midjourney:
                         "ids": [task_id]
                     }
 
-                    status_response = requests.get(
+                    status_response = requests.post(
                         f"{baseurl}/mj/task/list-by-condition",
                         headers=headers,
                         json=query_payload,
