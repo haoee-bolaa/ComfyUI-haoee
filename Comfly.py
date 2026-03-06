@@ -15644,13 +15644,13 @@ class Comfly_HaoeeVideo_Kling:
             else:
                 payload["image"] = image_base64
 
-                if model != "kling-video-v2-6":
+                if model != "kling-v2-6":
                     payload["resolution"] = resolution
 
-                if model in ["kling-video-v2-6","kling-video-v2-5-turbo"]:
+                if model in ["kling-v2-6","kling-video-v2-5-turbo"]:
                     payload["mode"] = mode
 
-                if model == "kling-video-v2-6":
+                if model == "kling-v2-6":
                     payload["sound"] = sound
             
             if seed > 0:
@@ -16621,7 +16621,7 @@ class Comfly_HaoeeImage_Gemini:
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["gemini-3-pro-image-preview", "gemini-3-pro-image-preview（test）"], {"default": "gemini-3-pro-image-preview"}),
+                "model": (["gemini-3-pro-image-preview"], {"default": "gemini-3-pro-image-preview"}),
                 "aspectRatio": (["1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"], {"default": "1:1"}),
                 "imageSize": (["1K", "2K", "4K"], {"default": "1K"}),
                 "apikey": ("STRING", {"default": ""}),
@@ -16669,18 +16669,10 @@ class Comfly_HaoeeImage_Gemini:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
 
-            # 正则匹配model是否包含（test）
-            lineType = "main"
-            if re.search(r'\（test\）', model, re.IGNORECASE):
-                print(f"Test model detected: model")
-                lineType = "test"
-                model = re.sub(r'\（test\）', '', model, flags=re.IGNORECASE)
-
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
-                "modelName": model,
-                "lineType": lineType
+                "modelName": model
             }
 
             all_images = [image1, image2, image3, image4]
