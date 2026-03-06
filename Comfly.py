@@ -17586,12 +17586,9 @@ class Comfly_HaoeeText2:
                 "Authorization": f"Bearer {self.api_key}",
                 "modelName": model
             }
-
-            content = [{'type': 'text', 'text': f"{prompt}"}]
-
             payload = {
                 "model": model,
-                "input": content,
+                "input": prompt,
             }
             
             response = requests.post(
