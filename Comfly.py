@@ -15570,6 +15570,7 @@ class Comfly_HaoeeVideo_Kling:
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
                 "mode": (["std", "pro"],{"default": "std"}),
                 "aspect_ratio": (["auto", "16:9", "4:3", "4:5", "3:2", "1:1", "2:3", "3:4", "5:4", "9:16", "21:9"],{"default": "auto"}),
+                "sound": (["on", "off"], {"default": "off"}),
             }
         }
 
@@ -15591,7 +15592,7 @@ class Comfly_HaoeeVideo_Kling:
         pil_image.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode('utf-8') # kling的image不加base64前缀
 
-    def generate_video(self, image, prompt, model, duration, resolution, api_key, negative_prompt="", seed=0, mode="std", aspect_ratio="auto"):
+    def generate_video(self, image, prompt, model, duration, resolution, api_key, negative_prompt="", seed=0, **kwargs):
         if api_key.strip():
             self.api_key = api_key
             
@@ -15615,35 +15616,46 @@ class Comfly_HaoeeVideo_Kling:
             }
 
             image_base64 = self.image_to_base64(image)
+            model_map = {
+                "kling-video-o1": "kling-video-o1",
+                "kling-video-v2-6": "kling-v2-6",
+                "kling-video-v2-5-turbo": "kling-v2-5-turbo",
+                 "kling-v2-1-master":  "kling-v2-1-master"
+            }
+
             payload = {
-                "model_name": model,
+                "model_name": model_map.get(model, model),
                 "prompt": prompt,
                 "negative_prompt": negative_prompt,
                 "duration": duration,
             }
+            
+            mode = kwargs.get("mode", "std")
+            aspect_ratio = kwargs.get("aspect_ratio", "auto")
+            sound = kwargs.get("sound", "off")
+
             if model == "kling-video-o1":
-                payload["mode"] = mode
-                payload["image_list"] = [
-                    { "image": image_base64 }
-                ]
-                payload["aspect_ratio"] = aspect_ratio
-                payload["sound"] = 'off' # kling-video-o1默认不带声音，其他模型默认带声音，所以只要是kling-video-o1就强制sound=false
+                payload.update({
+                    "image_list": [{"image": image_base64}],
+                    "mode": mode,
+                    "aspect_ratio": aspect_ratio,
+                    "sound": sound_bool
+                })
             else:
                 payload["image"] = image_base64
-                payload["resolution"] = resolution
-        
-                if model == "kling-video-v2-5-turbo": 
-                    payload["model_name"] = "kling-v2-5-turbo" # 兼容老版本api，虽然现在kling-video-v2-5-turbo和kling-v2-5-turbo是同一个模型，但老版本api只认kling-v2-5-turbo这个名字
-                    payload["mode"] = mode
-                if model== "kling-video-v2-6":
-                    payload["model_name"] = "kling-v2-6" # 同上,老版本api只认kling-v2-6这个名字
-                    payload["mode"] = mode
-            
 
+                if model != "kling-video-v2-6":
+                    payload["resolution"] = resolution
+
+                if model in ["kling-video-v2-6","kling-video-v2-5-turbo"]:
+                    payload["mode"] = mode
+
+                if model == "kling-video-v2-6":
+                    payload["sound"] = sound_bool
+            
             if seed > 0:
                 payload["seed"] = seed
 
-            print(f"use model {model}. payload {payload}")
             if model == "kling-video-o1":
                 response = requests.post(
                     f"{baseurl}/kling/v1/videos/omni-video",
@@ -17380,8 +17392,6 @@ class Comfly_HaoeeText:
                     "qwen3-vl-plus",
                     "qwen-plus",
                     "gemini-3-pro-preview",
-                    "gpt-5.2",
-                    #"gpt-5.2-pro",
                     "glm-4.7",
                     "glm-4.7-flash",
                 ], {"default": "gemini-3-pro-preview"}),
@@ -17511,6 +17521,116 @@ class Comfly_HaoeeText:
             error_message = f"Error completions: {str(e)}"
             print(error_message)
             return ("" ,error_message)
+class Comfly_HaoeeText2:
+    def __init__(self):
+        self.timeout = 300
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ([
+                    "gpt-5.2",
+                    #"gpt-5.2-pro",
+                ], {"default": "gpt-5.2"}),
+                "prompt": ("STRING", {"multiline": True, "default": "describe the image"}),
+                "temperature": ("FLOAT", {"default": 0.6,"min": 0.0, "max": 2.0, "step": 0.1}),
+                "apikey": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("describe", "response")
+    FUNCTION = "completions"
+    CATEGORY = "好易/Text"
+
+    def image_to_base64(self, image_tensor):
+        """Convert tensor to base64 string"""
+        if image_tensor is None:
+            return None
+            
+        pil_image = tensor2pil(image_tensor)[0]
+        buffered = BytesIO()
+        pil_image.save(buffered, format="PNG")
+        image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        return f"data:image/png;base64,{image_base64}"
+
+    def completions(self, apikey, model, prompt, temperature, seed=0 ):
+        if apikey.strip():
+            self.api_key = apikey
+            
+        if not self.api_key:
+            error_message = "API key not found"
+            print(error_message)
+            return ("" ,error_message)
+        
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "modelName": model
+            }
+
+            content = [{'type': 'text', 'text': f"{prompt}"}]
+
+            payload = {
+                "model": model,
+                "input": content,
+                "seed": seed if seed > 0 else 0
+            }
+            
+            response = requests.post(
+                f"{baseurl}/api/v2/openai/responses", 
+                headers=headers, 
+                json=payload, 
+                timeout=self.timeout
+            )
+
+            pbar.update_absolute(30)
+            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
+
+            if response.status_code != 200:
+                error_message = f"API Error: {response.status_code} - {response.text}"
+                return ("" ,error_message)
+        
+            result = response.json()
+            pbar.update_absolute(40)
+
+            if "error" in result:
+                error_message = result["error"]
+                print(error_message)
+                return ("", error_message)
+
+            if "output" not in result or not result["output"]:
+                error_message = "No choices in response"
+                print(error_message)
+                return ("", error_message)
+            
+            prompt_result = result["output"][0]["content"]['text']
+
+            if prompt_result.strip() == "":
+                error_message = "Empty response"
+                print(error_message)
+                return ("", error_message)
+
+            response_info = {
+                "prompt": prompt,
+                "model": model,
+                "seed": seed if seed > 0 else 0
+            }
+
+            return (prompt_result, response_info)
+
+        except Exception as e:
+            error_message = f"Error completions: {str(e)}"
+            print(error_message)
+            return ("" ,error_message)
 
 
 NODE_CLASS_MAPPINGS = {
@@ -17586,7 +17706,8 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
     "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
     "Comfly_HaoeeImage_Midjourney": Comfly_HaoeeImage_Midjourney,
-    "Comfly_HaoeeText": Comfly_HaoeeText
+    "Comfly_HaoeeText": Comfly_HaoeeText,
+    "Comfly_HaoeeText2": Comfly_HaoeeText2,
 }
 
 
@@ -17665,6 +17786,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeImage_Doubao_Seedream": "好易 绘图 Doubao Seedream",
     "Comfly_HaoeeImage_Midjourney": "好易 绘图 Midjourney",
     "Comfly_HaoeeText": "好易 LLM",
+    "Comfly_HaoeeText2": "好易 LLM2",
 }
 
 # Aliyun WanX 2.6 API Node
