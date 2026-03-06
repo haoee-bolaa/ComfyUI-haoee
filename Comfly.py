@@ -17542,8 +17542,10 @@ class Comfly_HaoeeText:
             print(error_message)
             return ("" ,error_message)
 class Comfly_HaoeeText2:
+
     def __init__(self):
         self.timeout = 300
+        self.api_key = ""
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -17551,14 +17553,21 @@ class Comfly_HaoeeText2:
             "required": {
                 "model": ([
                     "gpt-5.2",
-                    #"gpt-5.2-pro",
                 ], {"default": "gpt-5.2"}),
-                "prompt": ("STRING", {"multiline": True, "default": "describe the image"}),
-                "temperature": ("FLOAT", {"default": 0.6,"min": 0.0, "max": 2.0, "step": 0.1}),
+
+                "prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "describe the image"
+                }),
+
+                "temperature": ("FLOAT", {
+                    "default": 0.6,
+                    "min": 0.0,
+                    "max": 2.0,
+                    "step": 0.1
+                }),
+
                 "apikey": ("STRING", {"default": ""}),
-            },
-            "optional": {
-                
             }
         }
 
@@ -17567,17 +17576,16 @@ class Comfly_HaoeeText2:
     FUNCTION = "completions"
     CATEGORY = "好易/Text"
 
+    def completions(self, apikey, model, prompt, temperature):
 
-    def completions(self, apikey, model, prompt, temperature, ):
         if apikey.strip():
             self.api_key = apikey
-            
+
         if not self.api_key:
-            error_message = "API key not found"
-            print(error_message)
-            return ("" ,error_message)
-        
+            return ("", "API key not found")
+
         try:
+
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
 
@@ -17586,62 +17594,54 @@ class Comfly_HaoeeText2:
                 "Authorization": f"Bearer {self.api_key}",
                 "modelName": model
             }
+
             payload = {
                 "model": model,
                 "input": prompt,
+                "temperature": temperature
             }
-            
+
             response = requests.post(
-                f"{baseurl}/api/v2/openai/responses", 
-                headers=headers, 
-                json=payload, 
+                f"{baseurl}/api/v2/openai/responses",
+                headers=headers,
+                json=payload,
                 timeout=self.timeout
             )
 
             pbar.update_absolute(30)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
+
+            print(f"Request sent to {response.url}")
+            print(response.text)
 
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                return ("" ,error_message)
-        
+                return ("", f"API Error: {response.status_code} - {response.text}")
+
             result = response.json()
-            pbar.update_absolute(40)
 
-            if "error" in result:
-                error_message = result["error"]
-                print(error_message)
-                return ("", error_message)
+            if result.get("error"):
+                return ("", str(result["error"]))
 
-            if "output" not in result or not result["output"]:
-                error_message = "No choices in response"
-                print(error_message)
-                return ("", error_message)
-            
             prompt_result = ""
 
             for item in result.get("output", []):
                 for c in item.get("content", []):
                     if c.get("type") == "output_text":
                         prompt_result += c.get("text", "")
-                        
-            if prompt_result.strip() == "":
-                error_message = "Empty response"
-                print(error_message)
-                return ("", error_message)
+
+            if not prompt_result.strip():
+                return ("", "Empty response")
 
             response_info = json.dumps({
-                "prompt": prompt,
                 "model": model,
+                "usage": result.get("usage", {}),
             }, ensure_ascii=False, indent=2)
-            
+
+            pbar.update_absolute(100)
+
             return (prompt_result, response_info)
 
         except Exception as e:
-            error_message = f"Error completions: {str(e)}"
-            print(error_message)
-            return ("" ,error_message)
-
+            return ("", f"Error completions: {str(e)}")
 
 NODE_CLASS_MAPPINGS = {
     # "Comfly_api_set": Comfly_api_set,
