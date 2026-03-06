@@ -15593,7 +15593,7 @@ class Comfly_HaoeeVideo_Kling:
         pil_image.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode('utf-8') # kling的image不加base64前缀
 
-    def generate_video(self, image, image_tail=None, prompt, model, duration, resolution, api_key, negative_prompt="", seed=0, **kwargs):
+    def generate_video(self, image, prompt, model, duration, resolution, api_key, negative_prompt="", seed=0,  image_tail=None, **kwargs):
         if api_key.strip():
             self.api_key = api_key
             
@@ -15653,7 +15653,8 @@ class Comfly_HaoeeVideo_Kling:
 
                 if model == "kling-v2-6":
                     payload["sound"] = sound
-                    payload['image_tail'] = self.image_to_base64(image_tail) if image_tail is not None else None
+                    if image_tail is not None:
+                        payload["image_tail"] = self.image_to_base64(image_tail)
 
             
             if seed > 0:
