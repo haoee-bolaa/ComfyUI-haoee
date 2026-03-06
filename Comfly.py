@@ -17618,8 +17618,13 @@ class Comfly_HaoeeText2:
                 print(error_message)
                 return ("", error_message)
             
-            prompt_result = result["output"][0]["content"]['text']
+            prompt_result = ""
 
+            for item in result.get("output", []):
+                for c in item.get("content", []):
+                    if c.get("type") == "output_text":
+                        prompt_result += c.get("text", "")
+                        
             if prompt_result.strip() == "":
                 error_message = "Empty response"
                 print(error_message)
