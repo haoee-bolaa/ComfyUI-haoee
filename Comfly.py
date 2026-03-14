@@ -16626,7 +16626,7 @@ class Comfly_HaoeeImage_Gemini:
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
                 "model": (["gemini-3-pro-image-preview", "gemini-3-pro-image-preview（test）"], {"default": "gemini-3-pro-image-preview"}),
-                "aspectRatio": (["1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"], {"default": "1:1"}),
+                "aspectRatio": (["auto", "1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"], {"default": "auto"}),
                 "imageSize": (["1K", "2K", "4K"], {"default": "1K"}),
                 "apikey": ("STRING", {"default": ""}),
             },
@@ -16635,6 +16635,12 @@ class Comfly_HaoeeImage_Gemini:
                 "image2": ("IMAGE",),
                 "image3": ("IMAGE",),
                 "image4": ("IMAGE",),
+                "image5": ("IMAGE",),
+                "image6": ("IMAGE",),
+                "image7": ("IMAGE",),
+                "image7": ("IMAGE",),
+                "image9": ("IMAGE",),
+                "image10": ("IMAGE",),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647})  
             }
         }
@@ -16657,8 +16663,8 @@ class Comfly_HaoeeImage_Gemini:
         pil_image.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode('utf-8')
     
-    def generate_image(self, prompt, model="gemini-3-pro-image-preview", aspectRatio="1:1", 
-                      imageSize="1K", image1=None, image2=None, image3=None, image4=None, apikey="", seed=0):
+    def generate_image(self, prompt, model="gemini-3-pro-image-preview", aspectRatio="auto", 
+                      imageSize="1K", image1=None, image2=None, image3=None, image4=None, image5=None, image6=None, image7=None, image8=None, image9=None, image10=None, apikey="", seed=0):
         if apikey.strip():
             self.api_key = apikey
             
@@ -16687,7 +16693,7 @@ class Comfly_HaoeeImage_Gemini:
                 "lineType": lineType
             }
 
-            all_images = [image1, image2, image3, image4]
+            all_images = [image1, image2, image3, image4, image5, image6, image7, image8, image9, image10]
             base64_images = [self.image_to_base64(img) for img in all_images if img is not None]
             img_count = len(base64_images)
             print(f"Processing {img_count} input images")
@@ -16701,7 +16707,7 @@ class Comfly_HaoeeImage_Gemini:
                 "generationConfig": {
                     "responseModalities": ["Image"],
                     "imageConfig": {
-                        "aspectRatio": aspectRatio,
+                        "aspectRatio": "" if aspectRatio == "auto" else aspectRatio,
                         "imageSize": imageSize
                     }
                 },
