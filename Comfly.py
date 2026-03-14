@@ -16638,7 +16638,7 @@ class Comfly_HaoeeImage_Gemini:
                 "image5": ("IMAGE",),
                 "image6": ("IMAGE",),
                 "image7": ("IMAGE",),
-                "image7": ("IMAGE",),
+                "image8": ("IMAGE",),
                 "image9": ("IMAGE",),
                 "image10": ("IMAGE",),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647})  
