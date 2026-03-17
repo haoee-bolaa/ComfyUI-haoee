@@ -17529,7 +17529,7 @@ class Comfly_HaoeeText:
             
             prompt_result = result["choices"][0]["message"]["content"]
 
-            if prompt_result.strip() == "":
+            if not prompt_result or not str(prompt_result).strip():
                 error_message = "Empty response"
                 print(error_message)
                 return (error_message, "")
@@ -17541,7 +17541,7 @@ class Comfly_HaoeeText:
                 "seed": seed if seed > 0 else 0
             }
 
-            return (json.dumps(response_info), prompt_result)
+            return (json.dumps(response_info, ensure_ascii=False), prompt_result)
 
         except Exception as e:
             error_message = f"Error completions: {str(e)}"
@@ -17646,7 +17646,7 @@ class Comfly_HaoeeTextGPT:
 
             pbar.update_absolute(100)
 
-            return (json.dumps(response_info), prompt_result)
+            return (json.dumps(response_info, ensure_ascii=False), prompt_result)
 
         except Exception as e:
             return (f"Error completions: {str(e)}", "")
