@@ -16722,7 +16722,7 @@ class Comfly_HaoeeImage_Gemini:
             )
             
             pbar.update_absolute(30)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
+            print(f"Request sent to {response.url}. Response status code: {response.status_code}")
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
@@ -17442,7 +17442,7 @@ class Comfly_HaoeeText:
         }
 
     RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("describe", "response")
+    RETURN_NAMES = ("response", "describe")
     FUNCTION = "completions"
     CATEGORY = "好易/Text"
 
@@ -17465,7 +17465,7 @@ class Comfly_HaoeeText:
         if not self.api_key:
             error_message = "API key not found"
             print(error_message)
-            return ("" ,error_message)
+            return (error_message, "")
         
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -17512,7 +17512,7 @@ class Comfly_HaoeeText:
 
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return ("" ,error_message)
+                return (error_message, "")
         
             result = response.json()
             pbar.update_absolute(40)
@@ -17520,19 +17520,19 @@ class Comfly_HaoeeText:
             if "error" in result:
                 error_message = result["error"]
                 print(error_message)
-                return ("", error_message)
+                return (error_message, "")
 
             if "choices" not in result or not result["choices"]:
                 error_message = "No choices in response"
                 print(error_message)
-                return ("", error_message)
+                return (error_message, "")
             
             prompt_result = result["choices"][0]["message"]["content"]
 
             if prompt_result.strip() == "":
                 error_message = "Empty response"
                 print(error_message)
-                return ("", error_message)
+                return (error_message, "")
 
             response_info = {
                 "prompt": prompt,
@@ -17541,13 +17541,15 @@ class Comfly_HaoeeText:
                 "seed": seed if seed > 0 else 0
             }
 
-            return (prompt_result, response_info)
+            return (json.dumps(response_info), prompt_result)
 
         except Exception as e:
             error_message = f"Error completions: {str(e)}"
             print(error_message)
-            return ("" ,error_message)
-class Comfly_HaoeeText2:
+            return (error_message, "")
+
+
+class Comfly_HaoeeTextGPT:
 
     def __init__(self):
         self.timeout = 300
@@ -17578,7 +17580,7 @@ class Comfly_HaoeeText2:
         }
 
     RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("describe", "response")
+    RETURN_NAMES = ("response", "describe")
     FUNCTION = "completions"
     CATEGORY = "好易/Text"
 
@@ -17588,7 +17590,7 @@ class Comfly_HaoeeText2:
             self.api_key = apikey
 
         if not self.api_key:
-            return ("", "API key not found")
+            return ("API key not found", "")
 
         try:
 
@@ -17620,12 +17622,12 @@ class Comfly_HaoeeText2:
             print(response.text)
 
             if response.status_code != 200:
-                return ("", f"API Error: {response.status_code} - {response.text}")
+                return (f"API Error: {response.status_code} - {response.text}", "")
 
             result = response.json()
 
             if result.get("error"):
-                return ("", str(result["error"]))
+                return (str(result["error"]), "")
 
             prompt_result = ""
 
@@ -17635,7 +17637,7 @@ class Comfly_HaoeeText2:
                         prompt_result += c.get("text", "")
 
             if not prompt_result.strip():
-                return ("", "Empty response")
+                return ("Empty response", "")
 
             response_info = json.dumps({
                 "model": model,
@@ -17644,10 +17646,10 @@ class Comfly_HaoeeText2:
 
             pbar.update_absolute(100)
 
-            return (prompt_result, response_info)
+            return (json.dumps(response_info), prompt_result)
 
         except Exception as e:
-            return ("", f"Error completions: {str(e)}")
+            return (f"Error completions: {str(e)}", "")
 
 NODE_CLASS_MAPPINGS = {
     # "Comfly_api_set": Comfly_api_set,
@@ -17723,7 +17725,7 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
     "Comfly_HaoeeImage_Midjourney": Comfly_HaoeeImage_Midjourney,
     "Comfly_HaoeeText": Comfly_HaoeeText,
-    "Comfly_HaoeeText2": Comfly_HaoeeText2,
+    "Comfly_HaoeeTextGPT": Comfly_HaoeeTextGPT,
 }
 
 
@@ -17802,7 +17804,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeImage_Doubao_Seedream": "好易 绘图 Doubao Seedream",
     "Comfly_HaoeeImage_Midjourney": "好易 绘图 Midjourney",
     "Comfly_HaoeeText": "好易 LLM",
-    "Comfly_HaoeeText2": "好易 LLM2",
+    "Comfly_HaoeeTextGPT": "好易 LLM GPT",
 }
 
 # Aliyun WanX 2.6 API Node
