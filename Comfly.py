@@ -15777,9 +15777,9 @@ class Comfly_HaoeeVideo_vidu:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "model": (["viduq2-pro", "viduq2-turbo", "vidu2.0"], {"default": "viduq2-pro"}),
+                "model": (["viduq2-pro", "viduq2-turbo", "viduq2"], {"default": "viduq2-pro"}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
-                "duration": ("INT", {"default": 4, "min": 4, "max": 8}),
+                "duration": ([5, 10], {"default": 5}),
                 "resolution": (["540p", "720p", "1080p"], {"default": "720p"}),
                 "api_key": ("STRING", {"default": ""}),
             },
@@ -15849,7 +15849,7 @@ class Comfly_HaoeeVideo_vidu:
             }
 
             response = requests.post(
-                f"{baseurl}/vidu/v2/img2video",
+                f"{baseurl}/ent/v2/img2video",
                 headers=headers,
                 json=payload,
                 timeout=self.timeout
@@ -15883,7 +15883,7 @@ class Comfly_HaoeeVideo_vidu:
                 
                 try:
                     status_response = requests.get(
-                        f"{baseurl}/vidu/v2/tasks/{task_id}/creations",
+                        f"{baseurl}/ent/v2/tasks/{task_id}/creations",
                         headers=headers,
                         timeout=self.timeout
                     )
@@ -17716,7 +17716,7 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_HaoeeVideo_MiniMax": Comfly_HaoeeVideo_MiniMax,
     "Comfly_HaoeeVideo_Sora2": Comfly_HaoeeVideo_Sora2,
     "Comfly_HaoeeVideo_Kling": Comfly_HaoeeVideo_Kling,
-    # "Comfly_HaoeeVideo_vidu": Comfly_HaoeeVideo_vidu,
+    "Comfly_HaoeeVideo_vidu": Comfly_HaoeeVideo_vidu,
     # "Comfly_HaoeeVideo_Veo3": Comfly_HaoeeVideo_Veo3,
     "Comfly_HaoeeVideo_Wan": Comfly_HaoeeVideo_Wan,
     "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
@@ -17795,7 +17795,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeVideo_MiniMax": "好易 视频 MiniMax",
     "Comfly_HaoeeVideo_Sora2": "好易 视频 Sora2",
     "Comfly_HaoeeVideo_Kling": "好易 视频 Kling",
-    # "Comfly_HaoeeVideo_vidu": "好易 视频 Vidu",
+    "Comfly_HaoeeVideo_vidu": "好易 视频 Vidu",
     # "Comfly_HaoeeVideo_Veo3": "好易 视频 Veo3",
     "Comfly_HaoeeVideo_Wan": "好易 视频 Wan",
     "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
