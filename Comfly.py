@@ -16699,36 +16699,57 @@ class Comfly_HaoeeImage_Gemini:
             img_count = len(base64_images)
             print(f"Processing {img_count} input images")
 
-            parts = [{ "text": f"{prompt}" }]
+            parts = [{ "text": f"{prompt},生成新图" }]
             if img_count > 0:
-                parts.extend({"inline_data": {"mime_type": "image/png", "data": b64}} for b64 in base64_images)
-                
-            payload = {
-                "contents": [{'role': 'user', 'parts': parts }],
-                "generationConfig": {
-                    "responseModalities": ["Image"],
-                    "imageConfig": {
-                        "aspectRatio": "" if aspectRatio == "auto" else aspectRatio,
-                        "imageSize": imageSize
+                parts.extend({
+                    "inlineData": {
+                        "mimeType": "image/png",
+                        "data": b64
                     }
-                },
-                "seed": seed if seed > 0 else 0
+                } for b64 in base64_images)
+
+            image_config = {
+                "imageSize": imageSize
             }
-            if model == "gemini-3.1-flash-image-preview" or model == "gemini-3.1-flash-image-preview（test）":
-                response = requests.post(
-                    f"{baseurl}/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
-                    headers=headers,
-                    json=payload,
-                    timeout=self.timeout
-                )
-            else:
-                response = requests.post(
-                    f"{baseurl}/v1beta/models/gemini-3-pro-image-preview:generateContent",
-                    headers=headers,
-                    json=payload,
-                    timeout=self.timeout
-                )
-            
+            if aspectRatio != "auto":
+                image_config["aspectRatio"] = aspectRatio
+
+            payload = {
+                "contents": [{
+                    "role": "user",
+                    "parts": parts
+                }],
+                "generationConfig": {
+                    "responseModalities": ["TEXT","IMAGE"],
+                    "imageConfig": image_config
+                }
+            }
+            # parts = [{ "text": f"{prompt}" }]
+            # if img_count > 0:
+            #     parts.extend({"inline_data": {"mime_type": "image/png", "data": b64}} for b64 in base64_images)
+                
+            # payload = {
+            #     "contents": [{'role': 'user', 'parts': parts }],
+            #     "generationConfig": {
+            #         "responseModalities": ["Image"],
+            #         "imageConfig": {
+            #             "aspectRatio": "" if aspectRatio == "auto" else aspectRatio,
+            #             "imageSize": imageSize
+            #         }
+            #     },
+            # }
+            if seed > 0:
+                payload["seed"] = seed
+
+            api_model = model  # 已经去掉（test）
+            url = f"{baseurl}/v1beta/models/{api_model}:generateContent"
+            print(f"H: {headers}")
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout
+            )
             pbar.update_absolute(30)
             print(f"Request sent to {response.url}. Response status code: {response.status_code}")
             
@@ -16742,8 +16763,8 @@ class Comfly_HaoeeImage_Gemini:
             candidates = result.get("candidates") or []
             content = candidates[0].get("content") if candidates else {}
             parts = content.get("parts") or []
-            
             generated_tensors = []
+            texts_only = []
             for part in parts:
                 if "inlineData" in part:
                     image_base64 = part["inlineData"]["data"]
@@ -16752,20 +16773,33 @@ class Comfly_HaoeeImage_Gemini:
                         generated_image = Image.open(BytesIO(image_data))
                         generated_tensor = pil2tensor(generated_image)
                         generated_tensors.append(generated_tensor)
-             
+                    # 文本处理
+                elif "text" in part:
+                    texts_only.append(part["text"])
+                    
             response_info = f"Generated {len(generated_tensors)} images using {model}\n"
-            response_info += f"imageSize: {imageSize}\n"       
+            if texts_only:
+                response_info += "Text output:\n" + "\n".join(texts_only) + "\n" 
+            else:
+                response_info += f"imageSize: {imageSize}\n"
             pbar.update_absolute(100)
-            
+            print(f'generated_tensors: {len(generated_tensors)}')
             if generated_tensors:
-                combined_tensor = torch.cat(generated_tensors, dim=0)
+                if len(generated_tensors) == 1:
+                    combined_tensor = generated_tensors[0]  # 单张直接返回
+                else:
+                    combined_tensor = torch.cat(generated_tensors, dim=0)  # 多张拼接
                 return (combined_tensor, response_info, "")
             else:
-                error_message = "Failed to process any images"
-                print(error_message)
+                # error_message = "Failed to process any images"
+                # print(error_message)
                 blank_image = Image.new('RGB', (1024, 1024), color='white')
                 blank_tensor = pil2tensor(blank_image)
-                return (blank_tensor, error_message, "")
+                if texts_only:
+                    return (blank_tensor, response_info, "")
+                else:
+                    return (blank_tensor, "Failed to process any images or text", "")
+                # return (blank_tensor, error_message, "")
             
         except Exception as e:
             error_message = f"Error in image generation: {str(e)}"
