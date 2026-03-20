@@ -16714,13 +16714,20 @@ class Comfly_HaoeeImage_Gemini:
                 },
                 "seed": seed if seed > 0 else 0
             }
-                        
-            response = requests.post(
-                f"{baseurl}/v1beta/models/gemini-3-pro-image-preview:generateContent",
-                headers=headers,
-                json=payload,
-                timeout=self.timeout
-            )
+            if model == "gemini-3.1-flash-image-preview" or model == "gemini-3.1-flash-image-preview（test）":
+                response = requests.post(
+                    f"{baseurl}/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
+                    headers=headers,
+                    json=payload,
+                    timeout=self.timeout
+                )
+            else:
+                response = requests.post(
+                    f"{baseurl}/v1beta/models/gemini-3-pro-image-preview:generateContent",
+                    headers=headers,
+                    json=payload,
+                    timeout=self.timeout
+                )
             
             pbar.update_absolute(30)
             print(f"Request sent to {response.url}. Response status code: {response.status_code}")
