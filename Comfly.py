@@ -15810,7 +15810,7 @@ class Comfly_HaoeeVideo_vidu:
         base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
         return f"data:image/png;base64,{base64_str}"
     
-    def generate_video(self, image, model="viduq2-pro", prompt="", api_key="", is_rec=False, duration=4, seed=0, resolution="720p", 
+    def generate_video(self, image, model="viduq2-pro", prompt="", api_key="", is_rec=False, duration=5, seed=0, resolution="720p", 
                       movement_amplitude="auto", bgm=False):
         
         if api_key.strip():
@@ -15818,12 +15818,12 @@ class Comfly_HaoeeVideo_vidu:
             
         if not self.api_key:
             error_response = {"task_status": "failed", "task_status_msg": "API key not found"}
-            return (None, "", json.dumps(error_response))
+            return (EmptyVideoAdapter(), "", json.dumps(error_response))
         
         if image is None:
             error_message = "Image not provided"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}))
+            return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -15845,8 +15845,9 @@ class Comfly_HaoeeVideo_vidu:
                 "is_rec": is_rec,
                 "bgm": bgm,
                 "movement_amplitude": movement_amplitude,
-                "seed": seed if seed > 0 else 0
             }
+            if seed > 0:
+                payload["seed"] = seed
 
             response = requests.post(
                 f"{baseurl}/ent/v2/img2video",
@@ -15860,7 +15861,7 @@ class Comfly_HaoeeVideo_vidu:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, "", json.dumps({"status": "error", "message": error_message}))
+                return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
                 
             result = response.json()
             task_id = result.get("task_id")
@@ -15868,7 +15869,7 @@ class Comfly_HaoeeVideo_vidu:
             if not task_id:
                 error_message = "No task ID in API response"
                 print(error_message)
-                return (None, "", json.dumps({"status": "error", "message": error_message}))
+                return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
                 
             pbar.update_absolute(30)
             print(f"Video generation task submitted. Task ID: {task_id}")
@@ -15891,7 +15892,7 @@ class Comfly_HaoeeVideo_vidu:
                     
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}))
+                        return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
                         
                     status_result = status_response.json()
                     state = status_result.get("state", "")
@@ -15910,7 +15911,7 @@ class Comfly_HaoeeVideo_vidu:
                         err_code = status_result.get("err_code", "Unknown error")
                         error_message = f"Video generation failed: {err_code}"
                         print(error_message)
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}))
+                        return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
                         
                 except Exception as e:
                     print(f"Error checking generation status (attempt {attempts}): {str(e)}")
@@ -15918,7 +15919,7 @@ class Comfly_HaoeeVideo_vidu:
             if not video_url:
                 error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
                 print(error_message)
-                return (None, task_id, json.dumps({"status": "error", "message": error_message}))
+                return (EmptyVideoAdapter(), task_id, json.dumps({"status": "error", "message": error_message}))
             
             pbar.update_absolute(100)
             print(f"Video generation completed. URL: {video_url}")
@@ -15942,7 +15943,7 @@ class Comfly_HaoeeVideo_vidu:
             print(error_message)
             import traceback
             traceback.print_exc()
-            return (None, "", json.dumps({"status": "error", "message": error_message}))
+            return (EmptyVideoAdapter(), "", json.dumps({"status": "error", "message": error_message}))
 
 
 class Comfly_HaoeeVideo_Veo3:
@@ -16625,7 +16626,7 @@ class Comfly_HaoeeImage_Gemini:
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["gemini-3-pro-image-preview", "gemini-3-pro-image-preview（test）"], {"default": "gemini-3-pro-image-preview"}),
+                "model": (["gemini-3-pro-image-preview", "gemini-3-pro-image-preview（test）", "gemini-3.1-flash-image-preview", "gemini-3.1-flash-image-preview（test）"], {"default": "gemini-3-pro-image-preview"}),
                 "aspectRatio": (["auto", "1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"], {"default": "auto"}),
                 "imageSize": (["1K", "2K", "4K"], {"default": "1K"}),
                 "apikey": ("STRING", {"default": ""}),
@@ -17401,6 +17402,155 @@ class Comfly_HaoeeImage_Midjourney:
             blank_tensor = pil2tensor(blank_image)
             return (blank_tensor, error_message, "")
 
+class Comfly_HaoeeImage_Nano_banana2:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "prompt": ("STRING", {"multiline": True}),
+                "model": (["gemini-3.1-flash-image-preview", "gemini-3.1-flash-image-preview（test）"], {"default": "gemini-3.1-flash-image-preview"}),
+                "aspectRatio": (["auto", "1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"], {"default": "auto"}),
+                "imageSize": (["1K", "2K", "4K"], {"default": "1K"}),
+                "apikey": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "image1": ("IMAGE",),
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+                "image4": ("IMAGE",),
+                "image5": ("IMAGE",),
+                "image6": ("IMAGE",),
+                "image7": ("IMAGE",),
+                "image8": ("IMAGE",),
+                "image9": ("IMAGE",),
+                "image10": ("IMAGE",),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647})  
+            }
+        }
+    
+    RETURN_TYPES = ("IMAGE", "STRING", "STRING")
+    RETURN_NAMES = ("image", "response", "image_url")
+    FUNCTION = "generate_image"
+    CATEGORY = "好易/Image"
+
+    def __init__(self):
+        self.timeout = 600
+    
+    def image_to_base64(self, image_tensor):
+        """Convert tensor to base64 string with data URI prefix"""
+        if image_tensor is None:
+            return None
+            
+        pil_image = tensor2pil(image_tensor)[0]
+        buffered = BytesIO()
+        pil_image.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode('utf-8')
+    
+    def generate_image(self, prompt, model="gemini-3.1-flash-image-preview", aspectRatio="auto", 
+                      imageSize="1K", image1=None, image2=None, image3=None, image4=None, image5=None, image6=None, image7=None, image8=None, image9=None, image10=None, apikey="", seed=0):
+        if apikey.strip():
+            self.api_key = apikey
+            
+        if not self.api_key:
+            error_message = "API key not found"
+            print(error_message)
+            blank_image = Image.new('RGB', (1024, 1024), color='white')
+            blank_tensor = pil2tensor(blank_image)
+            return (blank_tensor, error_message, "")
+            
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            # 正则匹配model是否包含（test）
+            lineType = "main"
+            if re.search(r'\（test\）', model, re.IGNORECASE):
+                print(f"Test model detected: model")
+                lineType = "test"
+                model = re.sub(r'\（test\）', '', model, flags=re.IGNORECASE)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "modelName": model,
+                "lineType": lineType
+            }
+
+            all_images = [image1, image2, image3, image4, image5, image6, image7, image8, image9, image10]
+            base64_images = [self.image_to_base64(img) for img in all_images if img is not None]
+            img_count = len(base64_images)
+            print(f"Processing {img_count} input images")
+
+            parts = [{ "text": f"{prompt}" }]
+            if img_count > 0:
+                parts.extend({"inline_data": {"mime_type": "image/png", "data": b64}} for b64 in base64_images)
+                
+            payload = {
+                "contents": [{'role': 'user', 'parts': parts }],
+                "generationConfig": {
+                    "responseModalities": ["Image"],
+                    "imageConfig": {
+                        "aspectRatio": "" if aspectRatio == "auto" else aspectRatio,
+                        "imageSize": imageSize
+                    }
+                },
+                "seed": seed if seed > 0 else 0
+            }
+                        
+            response = requests.post(
+                f"{baseurl}/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
+                headers=headers,
+                json=payload,
+                timeout=self.timeout
+            )
+            
+            pbar.update_absolute(30)
+            print(f"Request sent to {response.url}. Response status code: {response.status_code}")
+            
+            if response.status_code != 200:
+                error_message = f"API Error: {response.status_code} - {response.text}"
+                blank_image = Image.new('RGB', (1024, 1024), color='white')
+                blank_tensor = pil2tensor(blank_image)
+                return (blank_tensor, error_message, "")
+                
+            result = response.json()
+            candidates = result.get("candidates") or []
+            content = candidates[0].get("content") if candidates else {}
+            parts = content.get("parts") or []
+            
+            generated_tensors = []
+            for part in parts:
+                if "inlineData" in part:
+                    image_base64 = part["inlineData"]["data"]
+                    if image_base64:
+                        image_data = base64.b64decode(image_base64)
+                        generated_image = Image.open(BytesIO(image_data))
+                        generated_tensor = pil2tensor(generated_image)
+                        generated_tensors.append(generated_tensor)
+             
+            response_info = f"Generated {len(generated_tensors)} images using {model}\n"
+            response_info += f"imageSize: {imageSize}\n"       
+            pbar.update_absolute(100)
+            
+            if generated_tensors:
+                combined_tensor = torch.cat(generated_tensors, dim=0)
+                return (combined_tensor, response_info, "")
+            else:
+                error_message = "Failed to process any images"
+                print(error_message)
+                blank_image = Image.new('RGB', (1024, 1024), color='white')
+                blank_tensor = pil2tensor(blank_image)
+                return (blank_tensor, error_message, "")
+            
+        except Exception as e:
+            error_message = f"Error in image generation: {str(e)}"
+            print(error_message)
+            import traceback
+            traceback.print_exc()
+            blank_image = Image.new('RGB', (1024, 1024), color='white')
+            blank_tensor = pil2tensor(blank_image)
+            return (blank_tensor, error_message, "")
+
 class Comfly_HaoeeText:
     def __init__(self):
         self.timeout = 300
@@ -17474,7 +17624,7 @@ class Comfly_HaoeeText:
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
-                "modelName": model
+                "modelName": model,
             }
 
             all_images = [image1, image2, image3, image4, image5, image6, image7, image8, image9, image10]
@@ -17716,7 +17866,7 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_HaoeeVideo_MiniMax": Comfly_HaoeeVideo_MiniMax,
     "Comfly_HaoeeVideo_Sora2": Comfly_HaoeeVideo_Sora2,
     "Comfly_HaoeeVideo_Kling": Comfly_HaoeeVideo_Kling,
-    "Comfly_HaoeeVideo_vidu": Comfly_HaoeeVideo_vidu,
+    # "Comfly_HaoeeVideo_vidu": Comfly_HaoeeVideo_vidu,
     # "Comfly_HaoeeVideo_Veo3": Comfly_HaoeeVideo_Veo3,
     "Comfly_HaoeeVideo_Wan": Comfly_HaoeeVideo_Wan,
     "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
@@ -17724,6 +17874,7 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
     "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
     "Comfly_HaoeeImage_Midjourney": Comfly_HaoeeImage_Midjourney,
+    # "Comfly_HaoeeImage_Nano_banana2": Comfly_HaoeeImage_Nano_banana2,
     "Comfly_HaoeeText": Comfly_HaoeeText,
     "Comfly_HaoeeTextGPT": Comfly_HaoeeTextGPT,
 }
@@ -17795,7 +17946,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeVideo_MiniMax": "好易 视频 MiniMax",
     "Comfly_HaoeeVideo_Sora2": "好易 视频 Sora2",
     "Comfly_HaoeeVideo_Kling": "好易 视频 Kling",
-    "Comfly_HaoeeVideo_vidu": "好易 视频 Vidu",
+    # "Comfly_HaoeeVideo_vidu": "好易 视频 Vidu",
     # "Comfly_HaoeeVideo_Veo3": "好易 视频 Veo3",
     "Comfly_HaoeeVideo_Wan": "好易 视频 Wan",
     "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
@@ -17803,6 +17954,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
     "Comfly_HaoeeImage_Doubao_Seedream": "好易 绘图 Doubao Seedream",
     "Comfly_HaoeeImage_Midjourney": "好易 绘图 Midjourney",
+    # "Comfly_HaoeeImage_Nano_banana2": "好易 绘图 Nano banana2",
     "Comfly_HaoeeText": "好易 LLM",
     "Comfly_HaoeeTextGPT": "好易 LLM GPT",
 }
