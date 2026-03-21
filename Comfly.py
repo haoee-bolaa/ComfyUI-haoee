@@ -16674,7 +16674,7 @@ class Comfly_HaoeeImage_Gemini:
             print(error_message)
             blank_image = Image.new('RGB', (1024, 1024), color='white')
             blank_tensor = pil2tensor(blank_image)
-            return (blank_tensor, error_message, "")
+            return (None, error_message, "")
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -16699,7 +16699,7 @@ class Comfly_HaoeeImage_Gemini:
             img_count = len(base64_images)
             print(f"Processing {img_count} input images")
 
-            parts = [{ "text": f"{prompt},生成新图" }]
+            parts = [{ "text": f"{prompt},生成图片" }]
             if img_count > 0:
                 parts.extend({
                     "inlineData": {
@@ -16757,7 +16757,7 @@ class Comfly_HaoeeImage_Gemini:
                 error_message = f"API Error: {response.status_code} - {response.text}"
                 blank_image = Image.new('RGB', (1024, 1024), color='white')
                 blank_tensor = pil2tensor(blank_image)
-                return (blank_tensor, error_message, "")
+                return (None, error_message, "")
                 
             result = response.json()
             candidates = result.get("candidates") or []
@@ -16796,9 +16796,9 @@ class Comfly_HaoeeImage_Gemini:
                 blank_image = Image.new('RGB', (1024, 1024), color='white')
                 blank_tensor = pil2tensor(blank_image)
                 if texts_only:
-                    return (blank_tensor, response_info, "")
+                    return (None, response_info, "")
                 else:
-                    return (blank_tensor, "Failed to process any images or text", "")
+                    return (None, "Failed to process any images or text", "")
                 # return (blank_tensor, error_message, "")
             
         except Exception as e:
@@ -16808,7 +16808,7 @@ class Comfly_HaoeeImage_Gemini:
             traceback.print_exc()
             blank_image = Image.new('RGB', (1024, 1024), color='white')
             blank_tensor = pil2tensor(blank_image)
-            return (blank_tensor, error_message, "")
+            return (None, error_message, "")
 
 
 class Comfly_HaoeeImage_Doubao_Seedream:
