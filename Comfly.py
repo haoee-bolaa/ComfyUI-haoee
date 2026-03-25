@@ -114,18 +114,53 @@ class ComflyVideoAdapter:
                 print(f"Error getting video dimensions: {str(e)}")
                 return 1280, 720
             
+    def _remux_faststart(self, input_path, output_path):
+        """Use ffmpeg to remux with moov atom at the front for seekability, duration and thumbnail."""
+        try:
+            if hasattr(folder_paths, "get_ffmpeg_path"):
+                ffmpeg_path = folder_paths.get_ffmpeg_path()
+            else:
+                ffmpeg_path = shutil.which("ffmpeg")
+
+            if not ffmpeg_path:
+                print("[ComflyVideoAdapter] ffmpeg not found, skipping faststart remux")
+                return False
+
+            result = subprocess.run(
+                [ffmpeg_path, "-y", "-i", input_path, "-c", "copy", "-movflags", "+faststart", output_path],
+                capture_output=True, text=True, timeout=120
+            )
+            if result.returncode != 0:
+                print(f"[ComflyVideoAdapter] ffmpeg remux failed: {result.stderr}")
+                return False
+            return True
+        except subprocess.TimeoutExpired:
+            print("[ComflyVideoAdapter] ffmpeg remux timed out")
+            return False
+        except Exception as e:
+            print(f"[ComflyVideoAdapter] ffmpeg remux error: {str(e)}")
+            return False
+
     def save_to(self, output_path, format="auto", codec="auto", metadata=None):
         if self.is_url:
             try:
                 response = requests.get(self.video_url, stream=True)
                 response.raise_for_status()
-                
-                with open(output_path, "wb") as f:
+
+                temp_path = output_path + ".tmp"
+                with open(temp_path, "wb") as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
+
+                if self._remux_faststart(temp_path, output_path):
+                    os.remove(temp_path)
+                else:
+                    shutil.move(temp_path, output_path)
                 return True
             except Exception as e:
                 print(f"Error downloading video from URL: {str(e)}")
+                if os.path.exists(output_path + ".tmp"):
+                    os.remove(output_path + ".tmp")
                 return False
         else:
             try:
