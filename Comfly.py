@@ -162,12 +162,12 @@ class Comfly_HaoeeVideo_MiniMax:
             
         if not self.api_key:
             error_response = {"status": "error", "message": "错误，未配置api_key"}
-            return (None, "", json.dumps(error_response, ensure_ascii=False))
+            raise Exception(json.dumps(error_response, ensure_ascii=False))
 
         if image is None:
             error_message = "错误，未配置image"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -202,7 +202,7 @@ class Comfly_HaoeeVideo_MiniMax:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
                 
             result = response.json()
             task_id = result.get("task_id")
@@ -210,7 +210,7 @@ class Comfly_HaoeeVideo_MiniMax:
             if not task_id:
                 error_message = "错误，未获取到task_id"
                 print(error_message)
-                return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
             
             pbar.update_absolute(30)
             print(f"Video generation task submitted. Task ID: {task_id}")
@@ -234,7 +234,7 @@ class Comfly_HaoeeVideo_MiniMax:
                     
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                     status_result = status_response.json()
                     state = status_result["data"]["state"]
@@ -267,7 +267,7 @@ class Comfly_HaoeeVideo_MiniMax:
                     elif state == "failed":
                         error_message = f"Video generation failed: {status_result.get('base_resp', {}).get('status_msg', 'Unknown error')}"
                         print(error_message)
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                        raise Exception(error_message)
                     
                 except Exception as e:
                     print(f"Error checking generation status: {str(e)}")
@@ -296,7 +296,7 @@ class Comfly_HaoeeVideo_MiniMax:
             print(error_message)
             import traceback
             traceback.print_exc()
-            return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
 
 
 class Comfly_HaoeeVideo_Sora2:
@@ -352,24 +352,24 @@ class Comfly_HaoeeVideo_Sora2:
             
         if not self.api_key:
             error_response = {"status": "error", "message": "API key not provided or not found in config"}
-            return (None, "", json.dumps(error_response, ensure_ascii=False))
+            raise Exception(json.dumps(error_response, ensure_ascii=False))
             
         if image is None:
             error_message = "Image not provided"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
 
         width, height = self.get_image_size(image)
 
         if (width, height) not in [(1280, 720), (720, 1280), (1024, 1792), (1792, 1024)]:
             error_message = "图片尺寸必须为 1280x720, 720x1280, 1024x1792, or 1792x1024"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
 
         if model == "sora-2" and size not in ["720x1280", "1280x720"]:
             error_message = "sora-2模型只支持720x1280和1280x720尺寸"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
         
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -404,7 +404,7 @@ class Comfly_HaoeeVideo_Sora2:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
                 
             result = response.json()
             task_id = result.get("id")
@@ -412,7 +412,7 @@ class Comfly_HaoeeVideo_Sora2:
             if not task_id:
                 error_message = "No task ID in API response"
                 print(error_message)
-                return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
             
             pbar.update_absolute(30)
             print(f"Video generation task submitted. Task ID: {task_id}")
@@ -435,7 +435,7 @@ class Comfly_HaoeeVideo_Sora2:
                     
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                     status_data = status_response.json()
                     status = status_data.get("status")
@@ -483,7 +483,7 @@ class Comfly_HaoeeVideo_Sora2:
                         fail_reason = status_data.get("error", {}).get("message", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
                         print(error_message)
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                 except Exception as e:
                     print(f"Error checking task status: {str(e)}")
@@ -491,7 +491,7 @@ class Comfly_HaoeeVideo_Sora2:
             if not video_url:
                 error_message = f"Failed to get video URL after {max_attempts} attempts"
                 print(error_message)
-                return (None, task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}, ensure_ascii=False))
+                raise Exception(error_message)
             
             video_adapter = ComflyVideoAdapter(video_url)
             
@@ -514,7 +514,7 @@ class Comfly_HaoeeVideo_Sora2:
             print(error_message)
             import traceback
             traceback.print_exc()
-            return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
 
 
 class Comfly_HaoeeVideo_Kling:
@@ -563,12 +563,12 @@ class Comfly_HaoeeVideo_Kling:
             
         if not self.api_key:
             error_response = {"task_status": "failed", "task_status_msg": "API key not found in Comflyapi.json"}
-            return (None, "", json.dumps(error_response, ensure_ascii=False))
+            raise Exception(json.dumps(error_response, ensure_ascii=False))
 
         if image is None:
             error_message = "Image not provided"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
 
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -645,19 +645,19 @@ class Comfly_HaoeeVideo_Kling:
             if response.status_code != 200:
                 error_message = f"Error: {response.status_code} {response.reason} - {response.text}"
                 error_response = {"task_status": "failed", "task_status_msg": error_message}
-                return (None, "", json.dumps(error_response, ensure_ascii=False))
+                raise Exception(json.dumps(error_response, ensure_ascii=False))
             
             result = response.json()
             if result["code"] != 0:
                 error_response = {"task_status": "failed", "task_status_msg": f"API Error: {result['message']}"}
-                return (None, "", json.dumps(error_response, ensure_ascii=False))
+                raise Exception(json.dumps(error_response, ensure_ascii=False))
                 
             task_id = result["data"]["task_id"]
             
             if not task_id:
                 error_message = "No task ID in API response"
                 print(error_message)
-                return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
             
             pbar.update_absolute(30)
             print(f"Video generation task submitted. Task ID: {task_id}")
@@ -687,7 +687,7 @@ class Comfly_HaoeeVideo_Kling:
 
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                     status_data = status_response.json()
                     status = status_data["data"]["task_status"]
@@ -703,7 +703,7 @@ class Comfly_HaoeeVideo_Kling:
                         fail_reason = status_data["data"].get("task_status_msg", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
                         print(error_message)
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}, ensure_ascii=False))
+                        raise Exception(error_message)
 
                 except Exception as e:
                     print(f"Error checking task status: {str(e)}")
@@ -711,7 +711,7 @@ class Comfly_HaoeeVideo_Kling:
             if not video_url:
                 error_message = f"Failed to get video URL after {max_attempts} attempts"
                 print(error_message)
-                return (None, task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}, ensure_ascii=False))
+                raise Exception(error_message)
             
             video_adapter = ComflyVideoAdapter(video_url)
             
@@ -732,7 +732,7 @@ class Comfly_HaoeeVideo_Kling:
         except Exception as e:
             error_response = {"task_status": "failed", "task_status_msg": f"Error generating video: {str(e)}"}
             print(f"Error generating video: {str(e)}")
-            return (None, "", json.dumps(error_response, ensure_ascii=False))
+            raise Exception(json.dumps(error_response, ensure_ascii=False))
 
 
 class Comfly_HaoeeVideo_vidu:
@@ -782,12 +782,12 @@ class Comfly_HaoeeVideo_vidu:
             
         if not self.api_key:
             error_response = {"task_status": "failed", "task_status_msg": "API key not found"}
-            return (None, "", json.dumps(error_response, ensure_ascii=False))
+            raise Exception(json.dumps(error_response, ensure_ascii=False))
         
         if image is None:
             error_message = "Image not provided"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -825,7 +825,7 @@ class Comfly_HaoeeVideo_vidu:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
                 
             result = response.json()
             task_id = result.get("task_id")
@@ -833,7 +833,7 @@ class Comfly_HaoeeVideo_vidu:
             if not task_id:
                 error_message = "No task ID in API response"
                 print(error_message)
-                return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
                 
             pbar.update_absolute(30)
             print(f"Video generation task submitted. Task ID: {task_id}")
@@ -856,7 +856,7 @@ class Comfly_HaoeeVideo_vidu:
                     
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                     status_result = status_response.json()
                     state = status_result.get("state", "")
@@ -875,7 +875,7 @@ class Comfly_HaoeeVideo_vidu:
                         err_code = status_result.get("err_code", "Unknown error")
                         error_message = f"Video generation failed: {err_code}"
                         print(error_message)
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                 except Exception as e:
                     print(f"Error checking generation status (attempt {attempts}): {str(e)}")
@@ -883,7 +883,7 @@ class Comfly_HaoeeVideo_vidu:
             if not video_url:
                 error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
                 print(error_message)
-                return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
             
             pbar.update_absolute(100)
             print(f"Video generation completed. URL: {video_url}")
@@ -907,7 +907,7 @@ class Comfly_HaoeeVideo_vidu:
             print(error_message)
             import traceback
             traceback.print_exc()
-            return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
 
 
 class Comfly_HaoeeVideo_Veo3:
@@ -952,12 +952,12 @@ class Comfly_HaoeeVideo_Veo3:
             
         if not self.api_key:
             error_response = {"code": "error", "message": "API key not found in Comflyapi.json"}
-            return (None, "", json.dumps(error_response, ensure_ascii=False))
+            raise Exception(json.dumps(error_response, ensure_ascii=False))
     
         if image is None:
             error_message = "Image not provided"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -991,7 +991,7 @@ class Comfly_HaoeeVideo_Veo3:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, "", json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
                 
             result = response.json()
             task_id = result.get("task_id")
@@ -999,7 +999,7 @@ class Comfly_HaoeeVideo_Veo3:
             if not task_id:
                 error_message = "No task ID returned from API"
                 print(error_message)
-                return (None, "", json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
             
             pbar.update_absolute(30)
 
@@ -1021,7 +1021,7 @@ class Comfly_HaoeeVideo_Veo3:
                     
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                     status_result = status_response.json()
                     status = status_result.get("status", "")
@@ -1037,7 +1037,7 @@ class Comfly_HaoeeVideo_Veo3:
                         fail_reason = status_result.get("fail_reason", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
                         print(error_message)
-                        return (None, task_id, json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                 except Exception as e:
                     print(f"Error checking generation status: {str(e)}")
@@ -1045,7 +1045,7 @@ class Comfly_HaoeeVideo_Veo3:
             if not video_url:
                 error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
                 print(error_message)
-                return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
             
             pbar.update_absolute(100)
             print(f"Video generation completed. URL: {video_url}")
@@ -1066,7 +1066,7 @@ class Comfly_HaoeeVideo_Veo3:
         except Exception as e:
             error_message = f"Error generating video: {str(e)}"
             print(error_message)
-            return (None, "", json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
         
 
 class Comfly_HaoeeVideo_Wan:
@@ -1117,17 +1117,17 @@ class Comfly_HaoeeVideo_Wan:
             
         if not self.api_key:
             error_response = {"code": "error", "message": "API key not found in Comflyapi.json"}
-            return (empty_video, "", json.dumps(error_response, ensure_ascii=False))
+            raise Exception(json.dumps(error_response, ensure_ascii=False))
     
         if image is None:
             error_message = "Image not provided"
             print(error_message)
-            return (empty_video, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
 
         if model == "wan2.6-i2v" and not audio:
             error_message = "wan2.6-i2v模型只能有声"
             print(error_message)
-            return (empty_video, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -1170,7 +1170,7 @@ class Comfly_HaoeeVideo_Wan:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (empty_video, "", json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
                 
             result = response.json()
             task_id = result.get("output", {}).get("task_id")
@@ -1178,7 +1178,7 @@ class Comfly_HaoeeVideo_Wan:
             if not task_id:
                 error_message = result.get("message", "No task ID returned from API") 
                 print(error_message)
-                return (empty_video, "", json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
             
             pbar.update_absolute(30)
 
@@ -1200,7 +1200,7 @@ class Comfly_HaoeeVideo_Wan:
                     
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (empty_video, task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                     status_result = status_response.json()
                     status = status_result.get("output", {}).get("task_status")
@@ -1215,7 +1215,7 @@ class Comfly_HaoeeVideo_Wan:
                         fail_reason = status_result.get("output", {}).get("message", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
                         print(error_message)
-                        return (empty_video, task_id, json.dumps({"code": "error", "message": error_message, "task_id": task_id}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                 except Exception as e:
                     print(f"Error checking generation status: {str(e)}")
@@ -1223,7 +1223,7 @@ class Comfly_HaoeeVideo_Wan:
             if not video_url:
                 error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
                 print(error_message)
-                return (empty_video, task_id, json.dumps({"status": "error", "message": error_message, "task_id": task_id}, ensure_ascii=False))
+                raise Exception(error_message)
             
             pbar.update_absolute(100)
             print(f"Video generation completed. URL: {video_url}")
@@ -1246,7 +1246,7 @@ class Comfly_HaoeeVideo_Wan:
         except Exception as e:
             error_message = f"Error generating video: {str(e)}"
             print(error_message)
-            return (empty_video, "", json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
    
         
 def safe_video_adapter(video_url=None):
@@ -1307,12 +1307,12 @@ class Comfly_HaoeeVideo_Doubao:
 
         if not self.api_key:
             error_response = {"code": "error", "message": "API key not found in Comflyapi.json"}
-            return (None, "", json.dumps(error_response, ensure_ascii=False))
+            raise Exception(json.dumps(error_response, ensure_ascii=False))
 
         if image is None:
             error_message = "Image not provided"
             print(error_message)
-            return (None, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
 
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -1351,7 +1351,7 @@ class Comfly_HaoeeVideo_Doubao:
 
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, "", json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
 
             result = response.json()
             print(f"result: {result}")
@@ -1385,7 +1385,7 @@ class Comfly_HaoeeVideo_Doubao:
 
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                        raise Exception(error_message)
                     status_result = status_response.json()
                     print(f"Response: {status_result}")
                     status = status_result.get("status", "").lower()
@@ -1399,7 +1399,7 @@ class Comfly_HaoeeVideo_Doubao:
                         break
                     elif status in ["failed", "failure"]:
                         fail_reason = status_result.get("fail_reason", "Unknown error")
-                        return (None, task_id, json.dumps({"code": "error", "message": f"Video generation failed: {fail_reason}"}, ensure_ascii=False))
+                        raise Exception(f"Video generation failed: {fail_reason}")
 
                 except Exception as e:
                     print(f"Error checking generation status: {str(e)}")
@@ -1407,7 +1407,7 @@ class Comfly_HaoeeVideo_Doubao:
             if not video_url:
                 error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
                 print(error_message)
-                return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
 
             pbar.update_absolute(100)
             video_adapter = safe_video_adapter(video_url)
@@ -1425,7 +1425,7 @@ class Comfly_HaoeeVideo_Doubao:
 
         except Exception as e:
             error_message = f"Error generating video: {str(e)}"
-            return (None, "", json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
 
 
 class Comfly_HaoeeVideo_grok:
@@ -1471,12 +1471,12 @@ class Comfly_HaoeeVideo_grok:
             
         if not self.api_key:
             error_response = {"code": "error", "message": "API key not found in Comflyapi.json"}
-            return (empty_video, "", json.dumps(error_response, ensure_ascii=False))
+            raise Exception(json.dumps(error_response, ensure_ascii=False))
     
         if image is None:
             error_message = "Image not provided"
             print(error_message)
-            return (empty_video, "", json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -1510,7 +1510,7 @@ class Comfly_HaoeeVideo_grok:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (empty_video, "", json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
                 
             result = response.json()
             task_id = result.get("id")
@@ -1518,7 +1518,7 @@ class Comfly_HaoeeVideo_grok:
             if not task_id:
                 error_message = "No task ID returned from API"
                 print(error_message)
-                return (empty_video, "", json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
             
             pbar.update_absolute(30)
 
@@ -1540,7 +1540,7 @@ class Comfly_HaoeeVideo_grok:
                     
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (empty_video, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                     status_result = status_response.json()
                     status = status_result.get("status", "")
@@ -1555,7 +1555,7 @@ class Comfly_HaoeeVideo_grok:
                         fail_reason = status_result.get("fail_reason", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
                         print(error_message)
-                        return (empty_video, task_id, json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                 except Exception as e:
                     print(f"Error checking generation status: {str(e)}")
@@ -1563,7 +1563,7 @@ class Comfly_HaoeeVideo_grok:
             if not video_url:
                 error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
                 print(error_message)
-                return (empty_video, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
             
             pbar.update_absolute(100)
             print(f"Video generation completed. URL: {video_url}")
@@ -1584,7 +1584,7 @@ class Comfly_HaoeeVideo_grok:
         except Exception as e:
             error_message = f"Error generating video: {str(e)}"
             print(error_message)
-            return (empty_video, "", json.dumps({"code": "error", "message": error_message}, ensure_ascii=False))
+            raise Exception(error_message)
 
 
 class Comfly_HaoeeImage_Gemini:
@@ -1639,7 +1639,7 @@ class Comfly_HaoeeImage_Gemini:
         if not self.api_key:
             error_message = "API key not found"
             print(error_message)
-            return (None, error_message, "")
+            raise Exception(error_message)
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -1720,7 +1720,7 @@ class Comfly_HaoeeImage_Gemini:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, error_message, "")
+                raise Exception(error_message)
                 
             result = response.json()
             candidates = result.get("candidates") or []
@@ -1757,9 +1757,9 @@ class Comfly_HaoeeImage_Gemini:
                 # error_message = "Failed to process any images"
                 # print(error_message)
                 if texts_only:
-                    return (None, response_info, "")
+                    raise Exception(response_info)
                 else:
-                    return (None, "Failed to process any images or text", "")
+                    raise Exception("Failed to process any images or text")
                 # return (None, error_message, "")
             
         except Exception as e:
@@ -1767,7 +1767,7 @@ class Comfly_HaoeeImage_Gemini:
             print(error_message)
             import traceback
             traceback.print_exc()
-            return (None, error_message, "")
+            raise Exception(error_message)
 
 
 class Comfly_HaoeeImage_Doubao_Seedream:
@@ -1855,7 +1855,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
         if not self.api_key:
             error_message = "API key not found in Comflyapi.json"
             print(error_message)
-            return (None, error_message, "")
+            raise Exception(error_message)
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -1903,7 +1903,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, error_message, "")
+                raise Exception(error_message)
                 
             result = response.json()
             
@@ -1912,7 +1912,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
             if "data" not in result or not result["data"]:
                 error_message = "No image data in response"
                 print(error_message)
-                return (None, error_message, "")
+                raise Exception(error_message)
             
             image_url = None
             image_data = None
@@ -1951,7 +1951,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
             if not generated_images:
                 error_message = "Failed to process any images"
                 print(error_message)
-                return (None, error_message, "")
+                raise Exception(error_message)
             
             combined_tensor = torch.cat(generated_images, dim=0)
                 
@@ -1978,7 +1978,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
         except Exception as e:
             error_message = f"Error generating image: {str(e)}"
             print(error_message)
-            return (None, error_message, "")
+            raise Exception(error_message)
 
 
 class Comfly_HaoeeImage_gpt_image:
@@ -2018,7 +2018,7 @@ class Comfly_HaoeeImage_gpt_image:
         if not self.api_key:
             error_message = "API key not found in Comflyapi.json"
             print(error_message)
-            return (None, error_message)
+            raise Exception(error_message)
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -2053,7 +2053,7 @@ class Comfly_HaoeeImage_gpt_image:
 
                 if response.status_code != 200:
                     error_message = f"API Error: {response.status_code} - {response.text}"
-                    return (None, error_message)
+                    raise Exception(error_message)
 
                 result = response.json()
                 
@@ -2098,7 +2098,7 @@ class Comfly_HaoeeImage_gpt_image:
                     error_message = "No generated images in response"
                     print(error_message)
                     response_info += f"Error: {error_message}\n"
-                    return (None, response_info)
+                    raise Exception(response_info)
 
                 if "usage" in result:
                     response_info += "Usage Information:\n"
@@ -2126,7 +2126,7 @@ class Comfly_HaoeeImage_gpt_image:
                     error_message = "No images were successfully processed"
                     print(error_message)
                     response_info += f"Error: {error_message}\n"
-                    return (None, response_info)
+                    raise Exception(response_info)
             else:
                 payload = {
                     "model": model,
@@ -2150,7 +2150,7 @@ class Comfly_HaoeeImage_gpt_image:
                 if response.status_code != 200:
                     error_message = f"API Error: {response.status_code} - {response.text}"
                     print(error_message)
-                    return (None, error_message)
+                    raise Exception(error_message)
                 # ---------- 2. 解析返回 ----------
                 result = response.json()
                 content = result["choices"][0]["message"]["content"]
@@ -2164,7 +2164,7 @@ class Comfly_HaoeeImage_gpt_image:
                 if not image_urls:
                     error_message = "No image URLs found in response"
                     print(error_message)
-                    return (None, content)
+                    raise Exception(content)
 
                 # ---------- 4. 下载并转 IMAGE ----------
                 generated_images = []
@@ -2184,7 +2184,7 @@ class Comfly_HaoeeImage_gpt_image:
                 if not generated_images:
                     error_message = "Images found but failed to download"
                     print(error_message)
-                    return (None, content)
+                    raise Exception(content)
                 # ---------- 5. 合并 batch ----------
                 combined_tensor = torch.cat(generated_images, dim=0)
                 pbar.update_absolute(100)
@@ -2194,7 +2194,7 @@ class Comfly_HaoeeImage_gpt_image:
         except Exception as e:
             error_message = f"Error in image generation: {str(e)}"
             print(error_message)
-            return (None, error_message)
+            raise Exception(error_message)
 
 
 class Comfly_HaoeeImage_Midjourney:
@@ -2242,7 +2242,7 @@ class Comfly_HaoeeImage_Midjourney:
         if not self.api_key:
             error_message = "API key not found"
             print(error_message)
-            return (None, error_message, "")
+            raise Exception(error_message)
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -2279,7 +2279,7 @@ class Comfly_HaoeeImage_Midjourney:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, error_message, "")
+                raise Exception(error_message)
                 
             result = response.json()
             task_id = result.get("result")
@@ -2287,7 +2287,7 @@ class Comfly_HaoeeImage_Midjourney:
             if not task_id:
                 error_message = "No task ID returned from API"
                 print(error_message)
-                return (None, error_message, "")
+                raise Exception(error_message)
             
             pbar.update_absolute(40)
 
@@ -2314,7 +2314,7 @@ class Comfly_HaoeeImage_Midjourney:
                     
                     if status_response.status_code != 200:
                         error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                        raise Exception(error_message)
                         
                     status_result = status_response.json()
                     status_data = status_result[0] if status_result else {}
@@ -2330,7 +2330,7 @@ class Comfly_HaoeeImage_Midjourney:
                         fail_reason = status_result.get("fail_reason", "Unknown error")
                         error_message = f"Image generation failed: {fail_reason}"
                         print(error_message)
-                        return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                        raise Exception(error_message)
                     
                 except Exception as e:
                     print(f"Error checking generation status: {str(e)}")
@@ -2338,7 +2338,7 @@ class Comfly_HaoeeImage_Midjourney:
             if not imageUrl:
                 error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
                 print(error_message)
-                return (None, task_id, json.dumps({"status": "error", "message": error_message}, ensure_ascii=False))
+                raise Exception(error_message)
               
 
             try:
@@ -2368,7 +2368,7 @@ class Comfly_HaoeeImage_Midjourney:
             print(error_message)
             import traceback
             traceback.print_exc()
-            return (None, error_message, "")
+            raise Exception(error_message)
 
 
 class Comfly_HaoeeImage_Nano_banana2:
@@ -2423,7 +2423,7 @@ class Comfly_HaoeeImage_Nano_banana2:
         if not self.api_key:
             error_message = "API key not found"
             print(error_message)
-            return (None, error_message, "")
+            raise Exception(error_message)
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -2476,7 +2476,7 @@ class Comfly_HaoeeImage_Nano_banana2:
             
             if response.status_code != 200:
                 error_message = f"API Error: {response.status_code} - {response.text}"
-                return (None, error_message, "")
+                raise Exception(error_message)
                 
             result = response.json()
             candidates = result.get("candidates") or []
@@ -2503,14 +2503,14 @@ class Comfly_HaoeeImage_Nano_banana2:
             else:
                 error_message = "Failed to process any images"
                 print(error_message)
-                return (None, error_message, "")
+                raise Exception(error_message)
             
         except Exception as e:
             error_message = f"Error in image generation: {str(e)}"
             print(error_message)
             import traceback
             traceback.print_exc()
-            return (None, error_message, "")
+            raise Exception(error_message)
 
 
 class Comfly_HaoeeText:
