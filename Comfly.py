@@ -13,10 +13,23 @@ import folder_paths
 import cv2
 import shutil
 import subprocess
+import traceback
 from .utils import pil2tensor, tensor2pil
 from comfy.comfy_types import IO
 
 baseurl = "https://maas.haoee.com"
+
+
+def _image_tensor_to_base64(image_tensor, with_prefix=True):
+    if image_tensor is None:
+        return None
+    pil_image = tensor2pil(image_tensor)[0]
+    buffered = BytesIO()
+    pil_image.save(buffered, format="PNG")
+    b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    if with_prefix:
+        return f"data:image/png;base64,{b64}"
+    return b64
 
 
 class ComflyVideoAdapter:
@@ -146,15 +159,7 @@ class Comfly_HaoeeVideo_MiniMax:
         self.timeout = 300
     
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string with data URI prefix"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/png;base64,{base64_str}"
+        return _image_tensor_to_base64(image_tensor, with_prefix=True)
     
     def generate_video(self, prompt, model="MiniMax-Hailuo-02", duration="6", resolution="768P", prompt_optimizer=True, image=None, api_key="", seed=0):
         if api_key.strip():
@@ -269,7 +274,7 @@ class Comfly_HaoeeVideo_MiniMax:
                         print(error_message)
                         raise Exception(error_message)
                     
-                except Exception as e:
+                except requests.exceptions.RequestException as e:
                     print(f"Error checking generation status: {str(e)}")
             pbar.update_absolute(100)
             if not video_url:
@@ -294,7 +299,6 @@ class Comfly_HaoeeVideo_MiniMax:
         except Exception as e:
             error_message = f"Error generating video: {str(e)}"
             print(error_message)
-            import traceback
             traceback.print_exc()
             raise Exception(error_message)
 
@@ -325,15 +329,7 @@ class Comfly_HaoeeVideo_Sora2:
         self.timeout = 300
     
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string with data URI prefix"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/png;base64,{base64_str}"
+        return _image_tensor_to_base64(image_tensor, with_prefix=True)
     
     def get_image_size(self, image):
         """
@@ -478,14 +474,13 @@ class Comfly_HaoeeVideo_Sora2:
                             else:
                                 print("Content not ready, waiting 3s...")
                                 time.sleep(3)
-                                waited += 3
                     elif status == "failed":
                         fail_reason = status_data.get("error", {}).get("message", "Unknown error")
                         error_message = f"Video generation failed: {fail_reason}"
                         print(error_message)
                         raise Exception(error_message)
                         
-                except Exception as e:
+                except requests.exceptions.RequestException as e:
                     print(f"Error checking task status: {str(e)}")
             
             if not video_url:
@@ -512,7 +507,6 @@ class Comfly_HaoeeVideo_Sora2:
         except Exception as e:
             error_message = f"Error in video generation: {str(e)}"
             print(error_message)
-            import traceback
             traceback.print_exc()
             raise Exception(error_message)
 
@@ -548,14 +542,7 @@ class Comfly_HaoeeVideo_Kling:
         self.timeout = 300
 
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string with data URI prefix"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        return base64.b64encode(buffered.getvalue()).decode('utf-8') # kling的image不加base64前缀
+        return _image_tensor_to_base64(image_tensor, with_prefix=False)
 
     def generate_video(self, image, prompt, model, duration, resolution, api_key, negative_prompt="", seed=0,  image_tail=None, **kwargs):
         if api_key.strip():
@@ -705,7 +692,7 @@ class Comfly_HaoeeVideo_Kling:
                         print(error_message)
                         raise Exception(error_message)
 
-                except Exception as e:
+                except requests.exceptions.RequestException as e:
                     print(f"Error checking task status: {str(e)}")
 
             if not video_url:
@@ -764,15 +751,7 @@ class Comfly_HaoeeVideo_vidu:
         self.timeout = 300
     
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string with data URI prefix"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/png;base64,{base64_str}"
+        return _image_tensor_to_base64(image_tensor, with_prefix=True)
     
     def generate_video(self, image, model="viduq2-pro", prompt="", api_key="", is_rec=False, duration=5, seed=0, resolution="720p", 
                       movement_amplitude="auto", bgm=False):
@@ -877,7 +856,7 @@ class Comfly_HaoeeVideo_vidu:
                         print(error_message)
                         raise Exception(error_message)
                         
-                except Exception as e:
+                except requests.exceptions.RequestException as e:
                     print(f"Error checking generation status (attempt {attempts}): {str(e)}")
             
             if not video_url:
@@ -905,7 +884,6 @@ class Comfly_HaoeeVideo_vidu:
         except Exception as e:
             error_message = f"Error generating video: {str(e)}"
             print(error_message)
-            import traceback
             traceback.print_exc()
             raise Exception(error_message)
 
@@ -936,15 +914,7 @@ class Comfly_HaoeeVideo_Veo3:
         self.timeout = 300
     
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string with data URI prefix"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/png;base64,{base64_str}"
+        return _image_tensor_to_base64(image_tensor, with_prefix=True)
     
     def generate_video(self, prompt, model="veo3", enhance_prompt=False, aspect_ratio="16:9", apikey="", image=None, seed=0):
         if apikey.strip():
@@ -1039,7 +1009,7 @@ class Comfly_HaoeeVideo_Veo3:
                         print(error_message)
                         raise Exception(error_message)
                         
-                except Exception as e:
+                except requests.exceptions.RequestException as e:
                     print(f"Error checking generation status: {str(e)}")
             
             if not video_url:
@@ -1100,18 +1070,9 @@ class Comfly_HaoeeVideo_Wan:
         self.timeout = 300
     
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string with data URI prefix"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/png;base64,{base64_str}"
+        return _image_tensor_to_base64(image_tensor, with_prefix=True)
     
     def generate_video(self, model, prompt, negative_prompt, resolution="720P", duration="5", prompt_extend=False, shot_type="single", audio=False, watermark=False, apikey="", image=None, seed=0):
-        empty_video = None
         if apikey.strip():
             self.api_key = apikey
             
@@ -1217,7 +1178,7 @@ class Comfly_HaoeeVideo_Wan:
                         print(error_message)
                         raise Exception(error_message)
                         
-                except Exception as e:
+                except requests.exceptions.RequestException as e:
                     print(f"Error checking generation status: {str(e)}")
             
             if not video_url:
@@ -1292,14 +1253,7 @@ class Comfly_HaoeeVideo_Doubao:
         self.api_key = None
 
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string with data URI prefix"""
-        if image_tensor is None:
-            return None
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/png;base64,{base64_str}"
+        return _image_tensor_to_base64(image_tensor, with_prefix=True)
 
     def generate_video(self, prompt, model, resolution="720p", duration=5, ratio="16:9", apikey="", image=None, seed=0):
         if apikey.strip():
@@ -1401,7 +1355,7 @@ class Comfly_HaoeeVideo_Doubao:
                         fail_reason = status_result.get("fail_reason", "Unknown error")
                         raise Exception(f"Video generation failed: {fail_reason}")
 
-                except Exception as e:
+                except requests.exceptions.RequestException as e:
                     print(f"Error checking generation status: {str(e)}")
 
             if not video_url:
@@ -1454,18 +1408,9 @@ class Comfly_HaoeeVideo_grok:
         self.timeout = 300
     
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string with data URI prefix"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/png;base64,{base64_str}"
+        return _image_tensor_to_base64(image_tensor, with_prefix=True)
     
     def generate_video(self, prompt, model="grok-video-3", aspect_ratio="2:3", size="720P", apikey="", image=None, seed=0):
-        empty_video = None
         if apikey.strip():
             self.api_key = apikey
             
@@ -1557,7 +1502,7 @@ class Comfly_HaoeeVideo_grok:
                         print(error_message)
                         raise Exception(error_message)
                         
-                except Exception as e:
+                except requests.exceptions.RequestException as e:
                     print(f"Error checking generation status: {str(e)}")
             
             if not video_url:
@@ -1622,14 +1567,7 @@ class Comfly_HaoeeImage_Gemini:
         self.timeout = 600
     
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string with data URI prefix"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        return base64.b64encode(buffered.getvalue()).decode('utf-8')
+        return _image_tensor_to_base64(image_tensor, with_prefix=False)
     
     def generate_image(self, prompt, model="gemini-3-pro-image-preview", aspectRatio="auto", 
                       imageSize="1K", image1=None, image2=None, image3=None, image4=None, image5=None, image6=None, image7=None, image8=None, image9=None, image10=None, apikey="", seed=0):
@@ -1648,7 +1586,7 @@ class Comfly_HaoeeImage_Gemini:
             # 正则匹配model是否包含（test）
             lineType = "main"
             if re.search(r'\（test\）', model, re.IGNORECASE):
-                print(f"Test model detected: model")
+                print(f"Test model detected: {model}")
                 lineType = "test"
                 model = re.sub(r'\（test\）', '', model, flags=re.IGNORECASE)
 
@@ -1765,7 +1703,6 @@ class Comfly_HaoeeImage_Gemini:
         except Exception as e:
             error_message = f"Error in image generation: {str(e)}"
             print(error_message)
-            import traceback
             traceback.print_exc()
             raise Exception(error_message)
 
@@ -1837,15 +1774,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
         }
     
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/png;base64,{image_base64}"
+        return _image_tensor_to_base64(image_tensor, with_prefix=True)
     
     def generate_image(self, prompt, model, response_format="url", resolution="1K", aspect_ratio="1:1", apikey="", 
                   image1=None, image2=None, image3=None, image4=None, seed=0):
@@ -2225,15 +2154,7 @@ class Comfly_HaoeeImage_Midjourney:
         self.timeout = 600
     
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string with data URI prefix"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        base64_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/png;base64,{base64_str}"
+        return _image_tensor_to_base64(image_tensor, with_prefix=True)
     
     def generate_image(self, prompt, botType="MID_JOURNEY", image1=None, image2=None, image3=None, image4=None, state="", apikey="", seed=0):
         if apikey.strip():
@@ -2332,7 +2253,7 @@ class Comfly_HaoeeImage_Midjourney:
                         print(error_message)
                         raise Exception(error_message)
                     
-                except Exception as e:
+                except requests.exceptions.RequestException as e:
                     print(f"Error checking generation status: {str(e)}")
             
             if not imageUrl:
@@ -2349,7 +2270,7 @@ class Comfly_HaoeeImage_Midjourney:
                 pil_image = Image.open(image_data)
                 tensor_image = pil2tensor(pil_image)
             except Exception as e:
-                print(f"Error downloading image: {str(e)}")
+                raise Exception(f"Error downloading image: {str(e)}")
                 
             pbar.update_absolute(100)
 
@@ -2361,12 +2282,11 @@ class Comfly_HaoeeImage_Midjourney:
                 "imageUrl": imageUrl
             }
 
-            return (tensor_image, response_info, "")
+            return (tensor_image, json.dumps(response_info, ensure_ascii=False), "")
             
         except Exception as e:
             error_message = f"Error in image generation: {str(e)}"
             print(error_message)
-            import traceback
             traceback.print_exc()
             raise Exception(error_message)
 
@@ -2406,14 +2326,7 @@ class Comfly_HaoeeImage_Nano_banana2:
         self.timeout = 600
     
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string with data URI prefix"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        return base64.b64encode(buffered.getvalue()).decode('utf-8')
+        return _image_tensor_to_base64(image_tensor, with_prefix=False)
     
     def generate_image(self, prompt, model="gemini-3.1-flash-image-preview", aspectRatio="auto", 
                       imageSize="1K", image1=None, image2=None, image3=None, image4=None, image5=None, image6=None, image7=None, image8=None, image9=None, image10=None, apikey="", seed=0):
@@ -2508,7 +2421,6 @@ class Comfly_HaoeeImage_Nano_banana2:
         except Exception as e:
             error_message = f"Error in image generation: {str(e)}"
             print(error_message)
-            import traceback
             traceback.print_exc()
             raise Exception(error_message)
 
@@ -2529,10 +2441,9 @@ class Comfly_HaoeeText:
                     "qwen3-max",
                     "qwen3-vl-plus",
                     "qwen-plus",
-                    "gemini-3-pro-preview",
                     "glm-4.7",
                     "glm-4.7-flash",
-                ], {"default": "gemini-3-pro-preview"}),
+                ], {"default": "deepseek-r1"}),
                 "role": ("STRING", {"multiline": True, "default": "You are a helpful assistant"}),
                 "prompt": ("STRING", {"multiline": True, "default": "describe the image"}),
                 "temperature": ("FLOAT", {"default": 0.6,"min": 0.0, "max": 2.0, "step": 0.1}),
@@ -2559,15 +2470,7 @@ class Comfly_HaoeeText:
     CATEGORY = "好易/Text"
 
     def image_to_base64(self, image_tensor):
-        """Convert tensor to base64 string"""
-        if image_tensor is None:
-            return None
-            
-        pil_image = tensor2pil(image_tensor)[0]
-        buffered = BytesIO()
-        pil_image.save(buffered, format="PNG")
-        image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/png;base64,{image_base64}"
+        return _image_tensor_to_base64(image_tensor, with_prefix=True)
 
     def completions(self, apikey, model, role, prompt, temperature, seed=0, image1=None, image2=None, image3=None, 
                          image4=None, image5=None, image6=None, image7=None, image8=None, image9=None, image10=None, ):
@@ -2758,7 +2661,7 @@ class Comfly_HaoeeTextGPT:
 
             pbar.update_absolute(100)
 
-            return (json.dumps(response_info, ensure_ascii=False), prompt_result)
+            return (response_info, prompt_result)
 
         except Exception as e:
             return (f"Error completions: {str(e)}", "")
