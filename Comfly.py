@@ -517,18 +517,18 @@ class Comfly_HaoeeVideo_Kling:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "image_tail": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True}),
                 "model": (["kling-video-o1", "kling-v2-6", "kling-video-v2-5-turbo", "kling-v2-1-master"], {"default": "kling-v2-6"}),
                 "duration": (["5", "10"], {"default": "5"}),
-                "resolution": (["1k", "2k", "4k"], {"default": "1k"}),
                 "api_key": ("STRING", {"default": ""}),
             },
             "optional": {
+                "image_tail": ("IMAGE",),
                 "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
-                "mode": (["std", "pro"],{"default": "std"}),
-                "aspect_ratio": (["auto", "16:9", "4:3", "4:5", "3:2", "1:1", "2:3", "3:4", "5:4", "9:16", "21:9"],{"default": "auto"}),
+                "mode": (["std", "pro"], {"default": "std"}),
+                "cfg_scale": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05}),
+                "aspect_ratio": (["16:9", "4:3", "4:5", "3:2", "1:1", "2:3", "3:4", "5:4", "9:16", "21:9"], {"default": "16:9"}),
                 "sound": (["on", "off"], {"default": "off"}),
             }
         }
@@ -544,7 +544,7 @@ class Comfly_HaoeeVideo_Kling:
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=False)
 
-    def generate_video(self, image, prompt, model, duration, resolution, api_key, negative_prompt="", seed=0,  image_tail=None, **kwargs):
+    def generate_video(self, image, prompt, model, duration, api_key, negative_prompt="", seed=0, image_tail=None, **kwargs):
         if api_key.strip():
             self.api_key = api_key
             
@@ -572,42 +572,56 @@ class Comfly_HaoeeVideo_Kling:
                 "kling-video-o1": "kling-video-o1",
                 "kling-v2-6": "kling-v2-6",
                 "kling-video-v2-5-turbo": "kling-v2-5-turbo",
-                 "kling-v2-1-master":  "kling-v2-1-master"
+                "kling-v2-1-master": "kling-v2-1-master"
             }
+
+            mode = kwargs.get("mode", "std")
+            sound = kwargs.get("sound", "off")
+            cfg_scale = kwargs.get("cfg_scale", 0.5)
+            aspect_ratio = kwargs.get("aspect_ratio", "auto")
 
             payload = {
                 "model_name": model_map.get(model, model),
                 "prompt": prompt,
-                "negative_prompt": negative_prompt,
                 "duration": duration,
             }
-            
-            mode = kwargs.get("mode", "std")
-            aspect_ratio = kwargs.get("aspect_ratio", "auto")
-            sound = kwargs.get("sound", "off")
+
+            if negative_prompt:
+                payload["negative_prompt"] = negative_prompt
 
             if model == "kling-video-o1":
-                payload.update({
-                    "image_list": [{"image_url": image_base64}],
-                    "mode": mode,
-                    "aspect_ratio": aspect_ratio,
-                    "sound": sound
-                })
-            else:
+                # o1: image_list, mode, sound, aspect_ratio
+                payload["mode"] = mode
+                payload["sound"] = sound
+                payload["aspect_ratio"] = aspect_ratio
+                payload["image_list"] = [{"image_url": image_base64, "type": "first_frame"}]
+                if image_tail is not None:
+                    payload["image_list"].append({"image_url": self.image_to_base64(image_tail), "type": "end_frame"})
+
+            elif model == "kling-v2-6":
+                # v2-6: image, image_tail, mode, sound, cfg_scale
                 payload["image"] = image_base64
+                payload["mode"] = mode if mode != "std" else "pro"
+                payload["sound"] = sound
+                payload["cfg_scale"] = cfg_scale
+                if image_tail is not None:
+                    payload["image_tail"] = self.image_to_base64(image_tail)
 
-                if model != "kling-v2-6":
-                    payload["resolution"] = resolution
+            elif model == "kling-video-v2-5-turbo":
+                # v2-5-turbo: image, image_tail, mode, cfg_scale
+                payload["image"] = image_base64
+                payload["mode"] = mode
+                payload["cfg_scale"] = cfg_scale
+                if image_tail is not None:
+                    payload["image_tail"] = self.image_to_base64(image_tail)
 
-                if model in ["kling-v2-6","kling-video-v2-5-turbo"]:
-                    payload["mode"] = mode
+            elif model == "kling-v2-1-master":
+                # v2-1-master: image, image_tail, cfg_scale
+                payload["image"] = image_base64
+                payload["cfg_scale"] = cfg_scale
+                if image_tail is not None:
+                    payload["image_tail"] = self.image_to_base64(image_tail)
 
-                if model == "kling-v2-6":
-                    payload["sound"] = sound
-                    if image_tail is not None:
-                        payload["image_tail"] = self.image_to_base64(image_tail)
-
-            
             if seed > 0:
                 payload["seed"] = seed
 
@@ -1086,9 +1100,7 @@ class Comfly_HaoeeVideo_Wan:
             raise Exception(error_message)
 
         if model == "wan2.6-i2v" and not audio:
-            error_message = "wan2.6-i2v模型只能有声"
-            print(error_message)
-            raise Exception(error_message)
+            audio = True
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -1105,7 +1117,7 @@ class Comfly_HaoeeVideo_Wan:
                 "model": model,
                 "input": {
                     "prompt": prompt,
-                    "negative_prompt": negative_prompt,
+                    "negative_prompt": negative_prompt if negative_prompt else "",
                     "img_url": image_base64
                 },
                 "parameters": {
