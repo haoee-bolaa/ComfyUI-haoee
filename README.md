@@ -46,3 +46,8 @@
  
 <img width="1590" height="396" alt="d3847520dd93d8e83eeca7b68c8bbf1f" src="https://github.com/user-attachments/assets/95596371-8aec-4d03-b9b1-1bd088092dd8" />
 <img width="900" height="806" alt="2d008ddaf8e0b6515f247cb02a35afaa" src="https://github.com/user-attachments/assets/c17c7632-e83a-4bb3-beec-a709026f69ec" />
+
+
+## 更新日志
+
+2026年4月16日：《好易 绘图 Midjourney》节点增加参数错误提示
