@@ -1682,7 +1682,7 @@ class Comfly_HaoeeImage_Gemini:
             if texts_only:
                 response_info += "Text output:\n" + "\n".join(texts_only) + "\n" 
             else:
-                response_info += f"imageSize: {imageSize}\n"
+                response_info += f"imageSize: {imageSize}\n generated_tensors: {len(generated_tensors)}\n"
             pbar.update_absolute(100)
             print(f'generated_tensors: {len(generated_tensors)}')
             if generated_tensors:
@@ -2248,7 +2248,7 @@ class Comfly_HaoeeImage_Midjourney:
                         imageUrl = status_data.get("imageUrl")
                         break
                     elif status == "FAILURE":
-                        fail_reason = status_result.get("fail_reason", "Unknown error")
+                        fail_reason = status_data.get("fail_reason", "Unknown error")
                         error_message = f"Image generation failed: {fail_reason}"
                         print(error_message)
                         raise Exception(error_message)
