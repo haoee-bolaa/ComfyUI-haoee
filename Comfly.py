@@ -2437,6 +2437,584 @@ class Comfly_HaoeeImage_Nano_banana2:
             raise Exception(error_message)
 
 
+def _haoee_parse_images_payload(result, prompt, model, size, response_format, extra_headline="GPT Image 2 Generation"):
+    log_prefix = "[HaoeeParseImages]"
+    print(f"{log_prefix} ==> start: model={model}, size={size}, response_format={response_format}, "
+          f"headline={extra_headline!r}, result_keys={list(result.keys()) if isinstance(result, dict) else type(result).__name__}")
+
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    response_info = f"**{extra_headline} ({timestamp})**\n\n"
+    response_info += f"Prompt: {prompt}\n"
+    response_info += f"Model: {model}\n"
+    if size:
+        response_info += f"Size: {size}\n"
+    if response_format:
+        response_info += f"Response Format: {response_format}\n"
+    response_info += "\n"
+
+    generated_images = []
+    data_items = result.get("data") or []
+    print(f"{log_prefix} data_items count={len(data_items)}")
+    if not data_items:
+        print(f"{log_prefix} ERROR: no data in response, raw={json.dumps(result, ensure_ascii=False)[:500]}")
+        raise Exception(f"No generated images in response: {json.dumps(result, ensure_ascii=False)}")
+
+    for idx, item in enumerate(data_items):
+        if "b64_json" in item and item["b64_json"]:
+            b64_data = item["b64_json"]
+            print(f"{log_prefix} item[{idx}] decode b64_json, len={len(b64_data)}")
+            if b64_data.startswith("data:image/"):
+                b64_data = b64_data.split(",", 1)[1]
+            try:
+                image_data = base64.b64decode(b64_data)
+                generated_image = Image.open(BytesIO(image_data)).convert("RGB")
+                print(f"{log_prefix} item[{idx}] decoded image size={generated_image.size}, bytes={len(image_data)}")
+                generated_images.append(pil2tensor(generated_image))
+            except Exception as e:
+                print(f"{log_prefix} item[{idx}] ERROR decoding b64: {e}")
+        elif "url" in item and item["url"]:
+            url = item["url"]
+            print(f"{log_prefix} item[{idx}] download url={url}")
+            try:
+                img_resp = requests.get(url, timeout=60)
+                img_resp.raise_for_status()
+                generated_image = Image.open(BytesIO(img_resp.content)).convert("RGB")
+                print(f"{log_prefix} item[{idx}] downloaded image size={generated_image.size}, bytes={len(img_resp.content)}")
+                generated_images.append(pil2tensor(generated_image))
+                response_info += f"Image URL: {url}\n"
+            except Exception as e:
+                print(f"{log_prefix} item[{idx}] ERROR downloading {url}: {e}")
+        else:
+            print(f"{log_prefix} item[{idx}] skipped: no b64_json/url, keys={list(item.keys()) if isinstance(item, dict) else type(item).__name__}")
+
+    if not generated_images:
+        print(f"{log_prefix} ERROR: none of the {len(data_items)} items produced an image")
+        raise Exception("Images found but failed to decode/download")
+
+    if "usage" in result and result["usage"]:
+        usage = result["usage"]
+        print(f"{log_prefix} usage={json.dumps(usage, ensure_ascii=False)}")
+        response_info += "\nUsage Information:\n"
+        if "total_tokens" in usage:
+            response_info += f"Total Tokens: {usage['total_tokens']}\n"
+        if "input_tokens" in usage:
+            response_info += f"Input Tokens: {usage['input_tokens']}\n"
+        if "output_tokens" in usage:
+            response_info += f"Output Tokens: {usage['output_tokens']}\n"
+        details = usage.get("input_tokens_details") or {}
+        if details:
+            response_info += "Input Token Details:\n"
+            if "text_tokens" in details:
+                response_info += f"  Text Tokens: {details['text_tokens']}\n"
+            if "image_tokens" in details:
+                response_info += f"  Image Tokens: {details['image_tokens']}\n"
+
+    combined_tensor = torch.cat(generated_images, dim=0)
+    print(f"{log_prefix} <== done: generated_images={len(generated_images)}, tensor_shape={tuple(combined_tensor.shape)}")
+    return combined_tensor, response_info
+
+
+def _haoee_parse_results_payload(result, prompt, model, size):
+    log_prefix = "[HaoeeParseResults]"
+    print(f"{log_prefix} ==> start: model={model}, size={size}, "
+          f"result_keys={list(result.keys()) if isinstance(result, dict) else type(result).__name__}")
+
+    status = result.get("status")
+    print(f"{log_prefix} status={status!r}")
+    if status and status != "succeeded":
+        reason = result.get("failure_reason") or result.get("error") or ""
+        print(f"{log_prefix} ERROR: task not succeeded, reason={reason!r}")
+        raise Exception(f"Task status={status}. {reason}".strip())
+
+    items = result.get("results") or []
+    print(f"{log_prefix} results count={len(items)}")
+    if not items:
+        print(f"{log_prefix} ERROR: empty results, raw={json.dumps(result, ensure_ascii=False)[:500]}")
+        raise Exception(f"No results in response: {json.dumps(result, ensure_ascii=False)}")
+
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    response_info = f"**GPT Image 2 Generation Test ({timestamp})**\n\n"
+    response_info += f"Prompt: {prompt}\n"
+    response_info += f"Model: {model}\n"
+    if size:
+        response_info += f"Size: {size}\n"
+    task_id = result.get("id") or result.get("task_id")
+    if task_id:
+        response_info += f"Task ID: {task_id}\n"
+        print(f"{log_prefix} task_id={task_id}")
+    start_time = result.get("start_time")
+    end_time = result.get("end_time")
+    if start_time and end_time:
+        response_info += f"Duration: {int(end_time) - int(start_time)}s\n"
+        print(f"{log_prefix} duration={int(end_time) - int(start_time)}s (start={start_time}, end={end_time})")
+    progress = result.get("progress")
+    if progress is not None:
+        response_info += f"Progress: {progress}\n"
+    response_info += "\n"
+
+    generated_images = []
+    for idx, it in enumerate(items):
+        url = it.get("url")
+        if not url:
+            print(f"{log_prefix} item[{idx}] skipped: no url, keys={list(it.keys()) if isinstance(it, dict) else type(it).__name__}")
+            continue
+        print(f"{log_prefix} item[{idx}] download url={url}")
+        try:
+            img_resp = requests.get(url, timeout=60)
+            img_resp.raise_for_status()
+            generated_image = Image.open(BytesIO(img_resp.content)).convert("RGB")
+            print(f"{log_prefix} item[{idx}] downloaded image size={generated_image.size}, bytes={len(img_resp.content)}")
+            generated_images.append(pil2tensor(generated_image))
+            response_info += f"Image URL: {url}\n"
+        except Exception as e:
+            print(f"{log_prefix} item[{idx}] ERROR downloading {url}: {e}")
+
+    if not generated_images:
+        print(f"{log_prefix} ERROR: {len(items)} results but no image downloaded")
+        raise Exception("Results returned but failed to download any image")
+
+    combined_tensor = torch.cat(generated_images, dim=0)
+    print(f"{log_prefix} <== done: generated_images={len(generated_images)}, tensor_shape={tuple(combined_tensor.shape)}")
+    return combined_tensor, response_info
+
+
+def _haoee_safe_payload_for_log(payload, max_str_len=200):
+    """Render a payload as JSON but shrink huge strings/lists (e.g. base64 images) for logging."""
+    def shrink(v):
+        if isinstance(v, str):
+            return v if len(v) <= max_str_len else f"<str len={len(v)}>"
+        if isinstance(v, list):
+            if len(v) <= 10:
+                return [shrink(x) for x in v]
+            return f"<list len={len(v)}>"
+        if isinstance(v, dict):
+            return {k: shrink(vv) for k, vv in v.items()}
+        return v
+    try:
+        return json.dumps(shrink(payload), ensure_ascii=False)
+    except Exception as e:
+        return f"<unprintable payload: {e}>"
+
+
+def _haoee_safe_json_parse(response, log_prefix):
+    """
+    Parse response body as JSON, with clear diagnostics when:
+      - body is empty
+      - body is not valid JSON (HTML/plain text etc.)
+    Raises Exception with a readable message; caller should let it bubble up.
+    """
+    body = response.text or ""
+    content_type = response.headers.get("Content-Type", "")
+    if not body.strip():
+        msg = (f"Empty response body (status={response.status_code}, "
+               f"content_type={content_type!r}, content_length={response.headers.get('Content-Length')})")
+        print(f"{log_prefix} ERROR: {msg}")
+        raise Exception(msg)
+    try:
+        return response.json()
+    except Exception as e:
+        preview = body if len(body) <= 500 else body[:500] + f"...<truncated, total_len={len(body)}>"
+        msg = (f"Invalid JSON response (status={response.status_code}, "
+               f"content_type={content_type!r}, parse_error={e}). body_preview={preview!r}")
+        print(f"{log_prefix} ERROR: {msg}")
+        raise Exception(msg)
+
+
+class Comfly_HaoeeImage_Gpt_Image2_Generations:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "prompt": ("STRING", {"multiline": True}),
+                "model": (["gpt-image-2"], {"default": "gpt-image-2"}),
+                "size": (["1024x1024", "1536x1024", "1024x1536"], {"default": "1024x1024"}),
+                "api_key": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "response_format": (["b64_json", "url"], {"default": "b64_json"}),
+                "image1": ("IMAGE",),
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+                "image4": ("IMAGE",),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("generated_image", "response")
+    FUNCTION = "generate_image"
+    CATEGORY = "好易/Image"
+
+    def __init__(self):
+        self.timeout = 300
+        self.api_key = None
+
+    def generate_image(self, prompt, model, size, api_key, response_format="b64_json",
+                       image1=None, image2=None, image3=None, image4=None, seed=0):
+        log_prefix = "[HaoeeGptImg2-Gen]"
+        ref_count = sum(1 for x in [image1, image2, image3, image4] if x is not None)
+        print(f"{log_prefix} ==> start: model={model}, size={size}, response_format={response_format}, "
+              f"prompt_len={len(prompt)}, ref_images={ref_count}, seed={seed}")
+
+        if api_key.strip():
+            self.api_key = api_key
+            print(f"{log_prefix} api_key overridden by input (len={len(api_key.strip())})")
+
+        if not self.api_key:
+            error_message = "API key not found"
+            print(f"{log_prefix} ERROR: {error_message}")
+            raise Exception(error_message)
+
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "modelName": model,
+                "lineType": "main",
+            }
+
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "size": size,
+                "response_format": response_format,
+            }
+
+            refs = []
+            for img in [image1, image2, image3, image4]:
+                if img is not None:
+                    refs.append(_image_tensor_to_base64(img, with_prefix=True))
+            if refs:
+                payload["image"] = refs
+            print(f"{log_prefix} payload={_haoee_safe_payload_for_log(payload)}")
+
+            pbar.update_absolute(25)
+            request_url = f"{baseurl}/v1/images/generations"
+            print(f"{log_prefix} POST {request_url}")
+            response = requests.post(
+                request_url,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+            )
+            print(f"{log_prefix} response.status_code={response.status_code}, url={response.url}, text_len={len(response.text)}")
+
+            if response.status_code != 200:
+                error_message = f"API Error: {response.status_code} - {response.text}"
+                print(f"{log_prefix} ERROR: non-200 response, body={response.text}")
+                raise Exception(error_message)
+
+            result = _haoee_safe_json_parse(response, log_prefix)
+            pbar.update_absolute(60)
+
+            combined_tensor, response_info = _haoee_parse_images_payload(
+                result, prompt, model, size, response_format,
+                extra_headline="GPT Image 2 Generation",
+            )
+            print(f"{log_prefix} parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
+            pbar.update_absolute(100)
+            print(f"{log_prefix} <== done")
+            return (combined_tensor, response_info)
+
+        except Exception as e:
+            error_message = f"Error in image generation: {str(e)}"
+            print(f"{log_prefix} EXCEPTION: {e}")
+            raise Exception(error_message)
+
+
+class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "prompt": ("STRING", {"multiline": True}),
+                "model": (["gpt-image-2"], {"default": "gpt-image-2"}),
+                "size": ([
+                    "auto",
+                    "1:1", "3:2", "2:3", "16:9", "9:16", "4:3", "3:4",
+                    "21:9", "9:21", "1:3", "3:1", "2:1", "1:2",
+                ], {"default": "auto"}),
+                "api_key": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "image1": ("IMAGE",),
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+                "image4": ("IMAGE",),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("generated_image", "response")
+    FUNCTION = "generate_image"
+    CATEGORY = "好易/Image"
+
+    def __init__(self):
+        self.timeout = 300
+        self.api_key = None
+
+    def generate_image(self, prompt, model, size, api_key,
+                       image1=None, image2=None, image3=None, image4=None, seed=0):
+        log_prefix = "[HaoeeGptImg2-GenTest]"
+        ref_count = sum(1 for x in [image1, image2, image3, image4] if x is not None)
+        print(f"{log_prefix} ==> start: model={model}, size={size}, "
+              f"prompt_len={len(prompt)}, ref_images={ref_count}, seed={seed}")
+
+        if api_key.strip():
+            self.api_key = api_key
+            print(f"{log_prefix} api_key overridden by input (len={len(api_key.strip())})")
+
+        if not self.api_key:
+            error_message = "API key not found"
+            print(f"{log_prefix} ERROR: {error_message}")
+            raise Exception(error_message)
+
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "modelName": model,
+                "lineType": "test",
+            }
+
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "size": size,
+            }
+
+            refs = []
+            for img in [image1, image2, image3, image4]:
+                if img is not None:
+                    refs.append(_image_tensor_to_base64(img, with_prefix=True))
+            if refs:
+                payload["urls"] = refs
+            print(f"{log_prefix} payload={_haoee_safe_payload_for_log(payload)}")
+
+            pbar.update_absolute(25)
+            request_url = f"{baseurl}/v1/draw/completions"
+            print(f"{log_prefix} POST {request_url} (SSE)")
+
+            sse_headers = dict(headers)
+            sse_headers["Accept"] = "text/event-stream"
+
+            response = requests.post(
+                request_url,
+                headers=sse_headers,
+                json=payload,
+                timeout=self.timeout,
+                stream=True,
+            )
+            content_type = response.headers.get("Content-Type", "")
+            print(f"{log_prefix} response.status_code={response.status_code}, url={response.url}, content_type={content_type!r}")
+
+            if response.status_code != 200:
+                try:
+                    body_text = response.text
+                except Exception:
+                    body_text = "<unreadable>"
+                print(f"{log_prefix} ERROR: non-200 response, body={body_text}")
+                raise Exception(f"API Error: {response.status_code} - {body_text}")
+
+            is_sse = ("text/event-stream" in content_type) or (not content_type)
+            result = None
+
+            if is_sse:
+                print(f"{log_prefix} parsing SSE stream")
+                last_progress = -1
+                last_status = None
+                event_count = 0
+
+                for raw_line in response.iter_lines(decode_unicode=True):
+                    if raw_line is None:
+                        continue
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    if not line.startswith("data:"):
+                        print(f"{log_prefix} sse non-data line: {line[:120]}")
+                        continue
+                    data_str = line[len("data:"):].strip()
+                    if not data_str or data_str == "[DONE]":
+                        continue
+                    try:
+                        evt = json.loads(data_str)
+                    except Exception as e:
+                        print(f"{log_prefix} sse invalid JSON: {data_str[:200]!r}, err={e}")
+                        continue
+
+                    event_count += 1
+                    progress = evt.get("progress")
+                    status = evt.get("status")
+                    failure_reason = (evt.get("failure_reason") or "").strip()
+                    err = (evt.get("error") or "").strip()
+
+                    status_changed = status != last_status
+                    log_this = False
+                    if status_changed:
+                        log_this = True
+                    elif isinstance(progress, int) and isinstance(last_progress, int) and progress - last_progress >= 10:
+                        log_this = True
+                    if log_this:
+                        print(f"{log_prefix} sse event#{event_count}: status={status!r}, progress={progress}")
+                        if status_changed:
+                            print(f"{log_prefix} sse event#{event_count} full={json.dumps(evt, ensure_ascii=False)}")
+                        last_status = status
+                        if isinstance(progress, int):
+                            last_progress = progress
+                            mapped = 25 + int(progress * 0.7)
+                            pbar.update_absolute(min(95, max(25, mapped)))
+
+                    if failure_reason or err or status == "failed":
+                        msg = failure_reason or err or "task failed"
+                        print(f"{log_prefix} ERROR: sse reported failure: {msg}")
+                        print(f"{log_prefix} ERROR: failure event full={json.dumps(evt, ensure_ascii=False)}")
+                        raise Exception(f"Task failed: {msg}")
+
+                    if status == "succeeded":
+                        result = evt
+                        print(f"{log_prefix} sse succeeded at event#{event_count}")
+                        print(f"{log_prefix} sse succeeded event full={json.dumps(evt, ensure_ascii=False)}")
+                        break
+
+                print(f"{log_prefix} sse stream finished, total_events={event_count}")
+                if result is None:
+                    raise Exception(f"SSE stream ended without a succeeded event (events={event_count})")
+            else:
+                print(f"{log_prefix} content_type is not SSE, fallback to JSON parsing")
+                result = _haoee_safe_json_parse(response, log_prefix)
+
+            pbar.update_absolute(95)
+
+            combined_tensor, response_info = _haoee_parse_results_payload(
+                result, prompt, model, size,
+            )
+            print(f"{log_prefix} parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
+            pbar.update_absolute(100)
+            print(f"{log_prefix} <== done")
+            return (combined_tensor, response_info)
+
+        except Exception as e:
+            error_message = f"Error in image generation (test): {str(e)}"
+            print(f"{log_prefix} EXCEPTION: {e}")
+            raise Exception(error_message)
+
+
+class Comfly_HaoeeImage_Gpt_Image2_Edit:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "prompt": ("STRING", {"multiline": True}),
+                "model": (["gpt-image-2"], {"default": "gpt-image-2"}),
+                "api_key": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "size": (["1024x1024", "1536x1024", "1024x1536"], {"default": "1024x1024"}),
+                "response_format": (["b64_json", "url"], {"default": "b64_json"}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("generated_image", "response")
+    FUNCTION = "edit_image"
+    CATEGORY = "好易/Image"
+
+    def __init__(self):
+        self.timeout = 300
+        self.api_key = None
+
+    def edit_image(self, image, prompt, model, api_key,
+                   size="1024x1024", response_format="b64_json", seed=0):
+        log_prefix = "[HaoeeGptImg2-Edit]"
+        print(f"{log_prefix} ==> start: model={model}, size={size}, response_format={response_format}, "
+              f"prompt_len={len(prompt)}, seed={seed}")
+
+        if api_key.strip():
+            self.api_key = api_key
+            print(f"{log_prefix} api_key overridden by input (len={len(api_key.strip())})")
+
+        if not self.api_key:
+            error_message = "API key not found"
+            print(f"{log_prefix} ERROR: {error_message}")
+            raise Exception(error_message)
+
+        if image is None:
+            print(f"{log_prefix} ERROR: image not provided")
+            raise Exception("Image not provided")
+
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            pil_image = tensor2pil(image)[0]
+            buf = BytesIO()
+            pil_image.save(buf, format="PNG")
+            buf.seek(0)
+            image_bytes = buf.getvalue()
+            buf.seek(0)
+            print(f"{log_prefix} image prepared: size={pil_image.size}, png_bytes={len(image_bytes)}")
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "modelName": model,
+                "lineType": "main",
+            }
+
+            data = {
+                "prompt": prompt,
+                "model": model,
+                "size": size,
+                "response_format": response_format,
+            }
+
+            files = {"image": ("image.png", buf, "image/png")}
+            print(f"{log_prefix} form_data={_haoee_safe_payload_for_log(data)}, files=[image.png]")
+
+            pbar.update_absolute(25)
+            request_url = f"{baseurl}/v1/images/edits"
+            print(f"{log_prefix} POST {request_url}")
+            response = requests.post(
+                request_url,
+                headers=headers,
+                data=data,
+                files=files,
+                timeout=self.timeout,
+            )
+            print(f"{log_prefix} response.status_code={response.status_code}, url={response.url}, text_len={len(response.text)}")
+
+            if response.status_code != 200:
+                error_message = f"API Error: {response.status_code} - {response.text}"
+                print(f"{log_prefix} ERROR: non-200 response, body={response.text}")
+                raise Exception(error_message)
+
+            result = _haoee_safe_json_parse(response, log_prefix)
+            pbar.update_absolute(60)
+
+            combined_tensor, response_info = _haoee_parse_images_payload(
+                result, prompt, model, size, response_format,
+                extra_headline="GPT Image 2 Edit",
+            )
+            print(f"{log_prefix} parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
+            pbar.update_absolute(100)
+            print(f"{log_prefix} <== done")
+            return (combined_tensor, response_info)
+
+        except Exception as e:
+            error_message = f"Error in image edit: {str(e)}"
+            print(f"{log_prefix} EXCEPTION: {e}")
+            raise Exception(error_message)
+
+
 class Comfly_HaoeeText:
     def __init__(self):
         self.timeout = 300
@@ -2679,6 +3257,183 @@ class Comfly_HaoeeTextGPT:
             return (f"Error completions: {str(e)}", "")
 
 
+class Comfly_HaoeeTextGPT5_4:
+    """
+    好易 LLM GPT-5.4 节点。
+
+    gpt-5.4 和 gpt-5.4-pro 请求体 + 响应体都不同：
+      - gpt-5.4     : 请求 { model, messages, max_completion_tokens }
+                      响应 Chat Completions 格式 choices[0].message.content
+      - gpt-5.4-pro : 请求 { model, input }
+                      响应 Responses API 格式 output[].content[].output_text
+    解析时按字段优先级分派：choices > output，兼容两种格式。
+    """
+
+    def __init__(self):
+        self.timeout = 600
+        self.api_key = ""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ([
+                    "gpt-5.4",
+                    "gpt-5.4-pro",
+                ], {"default": "gpt-5.4"}),
+
+                "prompt": ("STRING", { "multiline": True, "default": "" }),
+
+                "max_completion_tokens": ("INT", {
+                    "default": 300,
+                    "min": 1,
+                    "max": 131072,
+                    "step": 1
+                }),
+
+                "apikey": ("STRING", {"default": ""}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("response", "describe")
+    FUNCTION = "completions"
+    CATEGORY = "好易/Text"
+
+    def completions(self, apikey, model, prompt, max_completion_tokens):
+
+        log_prefix = "[HaoeeGPT5.4]"
+        print(f"{log_prefix} ==> start: model={model}, prompt_len={len(prompt)}, max_completion_tokens={max_completion_tokens}")
+
+        if apikey.strip():
+            self.api_key = apikey
+            print(f"{log_prefix} apikey overridden by input (len={len(apikey.strip())})")
+
+        if not self.api_key:
+            print(f"{log_prefix} ERROR: API key not found")
+            return ("API key not found", "")
+
+        try:
+
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "modelName": model
+            }
+
+            if model == "gpt-5.4-pro":
+                payload = {
+                    "model": model,
+                    "input": [
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                }
+                print(f"{log_prefix} payload schema=responses-input (gpt-5.4-pro)")
+            else:
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": prompt
+                                }
+                            ]
+                        }
+                    ],
+                    "max_completion_tokens": max_completion_tokens
+                }
+                print(f"{log_prefix} payload schema=chat-completions-messages (gpt-5.4)")
+
+            request_url = f"{baseurl}/v1/chat/completions"
+            print(f"{log_prefix} POST {request_url}")
+            print(f"{log_prefix} payload={json.dumps(payload, ensure_ascii=False)}")
+
+            response = requests.post(
+                request_url,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout
+            )
+
+            pbar.update_absolute(30)
+
+            print(f"{log_prefix} response.status_code={response.status_code}, url={response.url}, text_len={len(response.text)}")
+            print(f"{log_prefix} response.text={response.text}")
+
+            if response.status_code != 200:
+                print(f"{log_prefix} ERROR: non-200 response")
+                return (f"API Error: {response.status_code} - {response.text}", "")
+
+            result = response.json()
+
+            if result.get("error"):
+                print(f"{log_prefix} ERROR: result.error={result.get('error')}")
+                return (str(result["error"]), "")
+
+            prompt_result = ""
+            parse_format = None
+
+            choices = result.get("choices")
+            if isinstance(choices, list) and choices:
+                parse_format = "chat_completions"
+                for choice in choices:
+                    msg = choice.get("message") if isinstance(choice, dict) else None
+                    if not isinstance(msg, dict):
+                        continue
+                    content = msg.get("content")
+                    if isinstance(content, str):
+                        prompt_result += content
+                    elif isinstance(content, list):
+                        for c in content:
+                            if isinstance(c, dict) and isinstance(c.get("text"), str):
+                                prompt_result += c["text"]
+            elif isinstance(result.get("output"), list):
+                parse_format = "responses"
+                for item in result.get("output") or []:
+                    if not isinstance(item, dict):
+                        continue
+                    content_list = item.get("content") or []
+                    if not isinstance(content_list, list):
+                        continue
+                    for c in content_list:
+                        if isinstance(c, dict) and c.get("type") == "output_text":
+                            text = c.get("text")
+                            if isinstance(text, str):
+                                prompt_result += text
+
+            print(f"{log_prefix} parsed format={parse_format}, text_len={len(prompt_result)}")
+
+            if not prompt_result.strip():
+                print(f"{log_prefix} ERROR: empty text, raw_keys={list(result.keys())}")
+                return ("Empty response", "")
+
+            usage = result.get("usage", {}) or {}
+            print(f"{log_prefix} usage={json.dumps(usage, ensure_ascii=False)}")
+
+            response_info = json.dumps({
+                "model": model,
+                "usage": usage,
+            }, ensure_ascii=False, indent=2)
+
+            pbar.update_absolute(100)
+            print(f"{log_prefix} <== done: model={model}")
+
+            return (response_info, prompt_result)
+
+        except Exception as e:
+            print(f"{log_prefix} EXCEPTION: {e}")
+            return (f"Error completions: {str(e)}", "")
+
+
 NODE_CLASS_MAPPINGS = {
     "Comfly_Haoee_api_key": Comfly_Haoee_api_key,
     "Comfly_HaoeeVideo_MiniMax": Comfly_HaoeeVideo_MiniMax,
@@ -2691,10 +3446,14 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_HaoeeImage_Gemini": Comfly_HaoeeImage_Gemini,
     "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
     "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
+    # "Comfly_HaoeeImage_Gpt_Image2_Generations": Comfly_HaoeeImage_Gpt_Image2_Generations,
+    "Comfly_HaoeeImage_Gpt_Image2_Generations_Test": Comfly_HaoeeImage_Gpt_Image2_Generations_Test,
+    # "Comfly_HaoeeImage_Gpt_Image2_Edit": Comfly_HaoeeImage_Gpt_Image2_Edit,
     "Comfly_HaoeeImage_Midjourney": Comfly_HaoeeImage_Midjourney,
     # "Comfly_HaoeeImage_Nano_banana2": Comfly_HaoeeImage_Nano_banana2,
     "Comfly_HaoeeText": Comfly_HaoeeText,
     "Comfly_HaoeeTextGPT": Comfly_HaoeeTextGPT,
+    "Comfly_HaoeeTextGPT5.4": Comfly_HaoeeTextGPT5_4,
 }
 
 
@@ -2710,11 +3469,15 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
     "Comfly_HaoeeImage_Gemini": "好易 绘图 Gemini",
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
+    # "Comfly_HaoeeImage_Gpt_Image2_Generations": "好易 绘图 GPT Image2 图片生成",
+    "Comfly_HaoeeImage_Gpt_Image2_Generations_Test": "好易 绘图 GPT Image2 图片生成(测试渠道)",
+    # "Comfly_HaoeeImage_Gpt_Image2_Edit": "好易 绘图 GPT Image2 图片编辑",
     "Comfly_HaoeeImage_Doubao_Seedream": "好易 绘图 Doubao Seedream",
     "Comfly_HaoeeImage_Midjourney": "好易 绘图 Midjourney",
     # "Comfly_HaoeeImage_Nano_banana2": "好易 绘图 Nano banana2",
     "Comfly_HaoeeText": "好易 LLM",
     "Comfly_HaoeeTextGPT": "好易 LLM GPT",
+    "Comfly_HaoeeTextGPT5.4": "好易 LLM GPT5.4",
 }
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
