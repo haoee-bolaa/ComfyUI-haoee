@@ -1398,12 +1398,17 @@ class Comfly_HaoeeVideo_haoeedance:
     HAOEEDANCE_CREATE_URL = f"{baseurl}/api/v3/contents/generations/tasks"
     HAOEEDANCE_QUERY_URL = f"{baseurl}/api/v3/contents/generations/tasks/{{id}}"
 
+    MODEL_MAP = {
+        "Seedance-2-0": "haoeedance-2-0",
+        "Seedance-2-0-fast": "haoeedance-2-0-fast",
+    }
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
-                "model": (["haoeedance-2-0", "haoeedance-2-0-fast"], {"default": "haoeedance-2-0"}),
+                "model": (list(cls.MODEL_MAP.keys()), {"default": "Seedance-2-0"}),
                 "resolution": (["480p", "720p"], {"default": "720p"}),
                 "duration": ("INT", {"default": 5, "min": 4, "max": 15, "step": 1}),
                 "ratio": (["adaptive", "16:9", "4:3", "1:1", "3:4", "9:16", "21:9"], {"default": "adaptive"}),
@@ -1476,9 +1481,11 @@ class Comfly_HaoeeVideo_haoeedance:
             error_response = {"code": "error", "message": "API key not provided"}
             raise Exception(json.dumps(error_response, ensure_ascii=False))
 
+        api_model = self.MODEL_MAP.get(model, model)
+
         prompt_preview = (prompt[:80] + "...") if prompt and len(prompt) > 80 else (prompt or "")
         print(
-            f"[haoeedance] call: model={model}, resolution={resolution}, duration={duration}, "
+            f"[haoeedance] call: model={model}({api_model}), resolution={resolution}, duration={duration}, "
             f"ratio={ratio}, generate_audio={generate_audio}, watermark={watermark}, "
             f"return_last_frame={return_last_frame}, "
             f"first_frame={first_frame is not None}, last_frame={last_frame is not None}, "
@@ -1495,7 +1502,7 @@ class Comfly_HaoeeVideo_haoeedance:
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
-                "modelname": model,
+                "modelname": api_model,
             }
 
             content = []
@@ -1546,7 +1553,7 @@ class Comfly_HaoeeVideo_haoeedance:
             print(f"[haoeedance] content items ({len(content)}): {content_summary}")
 
             payload = {
-                "model": model,
+                "model": api_model,
                 "content": content,
                 "resolution": resolution,
                 "duration": int(duration),
@@ -3721,7 +3728,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # "Comfly_HaoeeVideo_Veo3": "好易 视频 Veo3",
     "Comfly_HaoeeVideo_Wan": "好易 视频 Wan",
     "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
-    "Comfly_HaoeeVideo_haoeedance": "好易 视频 HaoeeDance",
+    "Comfly_HaoeeVideo_haoeedance": "好易 视频 Seedance",
     "Comfly_HaoeeImage_Gemini": "好易 绘图 Gemini",
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
     # "Comfly_HaoeeImage_Gpt_Image2_Generations": "好易 绘图 GPT Image2 图片生成",

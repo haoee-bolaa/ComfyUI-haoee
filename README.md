@@ -2,7 +2,7 @@
 
 ## 更新日志
 
-- 2026年4月28日：增加《好易 视频 HaoeeDance》节点，包含模型haoeedance-2-0、haoeedance-2-0-fast
+- 2026年4月28日：增加《好易 视频 Seedance》节点，包含模型Seedance-2-0、Seedance-2-0-fast
 - 2026年4月24日：增加《好易 LLM GPT5.4》节点，包含gpt-5.4、gpt-5.4-pro模型
 - 2026年4月24日：增加 gpt-image-2 测试渠道节点-《好易 绘图 GPT Image2 图片生成(测试渠道)》
 - 2026年4月16日：《好易 绘图 Midjourney》节点增加参数错误提示
