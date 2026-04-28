@@ -1394,6 +1394,259 @@ class Comfly_HaoeeVideo_Doubao:
             raise Exception(error_message)
 
 
+class Comfly_HaoeeVideo_haoeedance:
+    HAOEEDANCE_CREATE_URL = f"{baseurl}/api/v3/contents/generations/tasks"
+    HAOEEDANCE_QUERY_URL = f"{baseurl}/api/v3/contents/generations/tasks/{{id}}"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "prompt": ("STRING", {"multiline": True, "default": ""}),
+                "model": (["haoeedance-2-0", "haoeedance-2-0-fast"], {"default": "haoeedance-2-0"}),
+                "resolution": (["480p", "720p"], {"default": "720p"}),
+                "duration": ("INT", {"default": 5, "min": 4, "max": 15, "step": 1}),
+                "ratio": (["adaptive", "16:9", "4:3", "1:1", "3:4", "9:16", "21:9"], {"default": "adaptive"}),
+                "apikey": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "first_frame": ("IMAGE",),
+                "last_frame": ("IMAGE",),
+                "reference_image_1": ("IMAGE",),
+                "reference_image_2": ("IMAGE",),
+                "reference_image_3": ("IMAGE",),
+                "reference_image_4": ("IMAGE",),
+                "reference_video_url": ("STRING", {"default": ""}),
+                "reference_audio_url": ("STRING", {"default": ""}),
+                "generate_audio": ("BOOLEAN", {"default": True}),
+                "watermark": ("BOOLEAN", {"default": False}),
+                "return_last_frame": ("BOOLEAN", {"default": False}),
+            },
+        }
+
+    RETURN_TYPES = (IO.VIDEO, "IMAGE", "STRING", "STRING")
+    RETURN_NAMES = ("video", "last_frame", "task_id", "response")
+    FUNCTION = "generate_video"
+    CATEGORY = "好易/Video"
+
+    def __init__(self):
+        self.timeout = 30
+        self.api_key = None
+
+    def _img_b64(self, image_tensor):
+        return _image_tensor_to_base64(image_tensor, with_prefix=True)
+
+    def _empty_image(self):
+        return torch.zeros(1, 1, 1, 3)
+
+    def _download_last_frame(self, url):
+        try:
+            resp = requests.get(url, timeout=60)
+            resp.raise_for_status()
+            pil_img = Image.open(BytesIO(resp.content))
+            return pil2tensor(pil_img)
+        except Exception as e:
+            print(f"[haoeedance] download last_frame failed: {e}")
+            return self._empty_image()
+
+    def generate_video(
+        self,
+        prompt,
+        model,
+        resolution="720p",
+        duration=5,
+        ratio="adaptive",
+        apikey="",
+        first_frame=None,
+        last_frame=None,
+        reference_image_1=None,
+        reference_image_2=None,
+        reference_image_3=None,
+        reference_image_4=None,
+        reference_video_url="",
+        reference_audio_url="",
+        generate_audio=True,
+        watermark=False,
+        return_last_frame=False,
+    ):
+        if apikey and apikey.strip():
+            self.api_key = apikey.strip()
+
+        if not self.api_key:
+            error_response = {"code": "error", "message": "API key not provided"}
+            raise Exception(json.dumps(error_response, ensure_ascii=False))
+
+        prompt_preview = (prompt[:80] + "...") if prompt and len(prompt) > 80 else (prompt or "")
+        print(
+            f"[haoeedance] call: model={model}, resolution={resolution}, duration={duration}, "
+            f"ratio={ratio}, generate_audio={generate_audio}, watermark={watermark}, "
+            f"return_last_frame={return_last_frame}, "
+            f"first_frame={first_frame is not None}, last_frame={last_frame is not None}, "
+            f"ref_imgs={sum(x is not None for x in (reference_image_1, reference_image_2, reference_image_3, reference_image_4))}, "
+            f"ref_video={'yes' if reference_video_url and reference_video_url.strip() else 'no'}, "
+            f"ref_audio={'yes' if reference_audio_url and reference_audio_url.strip() else 'no'}, "
+            f"prompt={prompt_preview!r}"
+        )
+
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "modelname": model,
+            }
+
+            content = []
+            if prompt and prompt.strip():
+                content.append({"type": "text", "text": prompt})
+
+            if first_frame is not None:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": self._img_b64(first_frame)},
+                    "role": "first_frame",
+                })
+            if last_frame is not None:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": self._img_b64(last_frame)},
+                    "role": "last_frame",
+                })
+
+            for ref_img in (reference_image_1, reference_image_2, reference_image_3, reference_image_4):
+                if ref_img is not None:
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": self._img_b64(ref_img)},
+                        "role": "reference_image",
+                    })
+
+            if reference_video_url and reference_video_url.strip():
+                content.append({
+                    "type": "video_url",
+                    "video_url": {"url": reference_video_url.strip()},
+                    "role": "reference_video",
+                })
+
+            if reference_audio_url and reference_audio_url.strip():
+                content.append({
+                    "type": "audio_url",
+                    "audio_url": {"url": reference_audio_url.strip()},
+                    "role": "reference_audio",
+                })
+
+            if not content:
+                raise Exception("content 为空：至少需要 prompt 或一张图片/视频/音频")
+
+            content_summary = [
+                {"type": item["type"], "role": item.get("role", "")} for item in content
+            ]
+            print(f"[haoeedance] content items ({len(content)}): {content_summary}")
+
+            payload = {
+                "model": model,
+                "content": content,
+                "resolution": resolution,
+                "duration": int(duration),
+                "ratio": ratio,
+                "generate_audio": bool(generate_audio),
+                "watermark": bool(watermark),
+                "return_last_frame": bool(return_last_frame),
+            }
+
+            print(f"[haoeedance] POST {self.HAOEEDANCE_CREATE_URL}")
+            response = requests.post(
+                self.HAOEEDANCE_CREATE_URL,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+            )
+            pbar.update_absolute(20)
+            print(f"[haoeedance] create status={response.status_code}, body={response.text}")
+
+            if response.status_code != 200:
+                raise Exception(f"API Error: {response.status_code} - {response.text}")
+
+            result = response.json()
+            task_id = result.get("id")
+            if not task_id:
+                raise Exception(f"未获取到 task id, response={result}")
+
+            pbar.update_absolute(30)
+            print(f"[haoeedance] task submitted: {task_id}")
+
+            max_attempts = 60
+            attempts = 0
+            video_url = None
+            last_frame_url = None
+            status_result = {}
+
+            while attempts < max_attempts:
+                time.sleep(10)
+                attempts += 1
+
+                try:
+                    status_response = requests.get(
+                        self.HAOEEDANCE_QUERY_URL.format(id=task_id),
+                        headers=headers,
+                        timeout=self.timeout,
+                    )
+                    print(f"[haoeedance] poll {attempts}: status={status_response.status_code}, body={status_response.text}")
+
+                    if status_response.status_code != 200:
+                        raise Exception(f"Status check failed: {status_response.status_code} - {status_response.text}")
+
+                    status_result = status_response.json()
+                    task_status = (status_result.get("status") or "").lower()
+                    content_resp = status_result.get("content") or {}
+
+                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    pbar.update_absolute(progress_value)
+
+                    print(f"[haoeedance] task {task_id} status={task_status} (attempt {attempts}/{max_attempts})")
+
+                    if task_status == "succeeded":
+                        video_url = content_resp.get("video_url")
+                        last_frame_url = content_resp.get("last_frame_url")
+                        if video_url:
+                            print(f"[haoeedance] task {task_id} succeeded, last_frame_url={'yes' if last_frame_url else 'no'}")
+                            break
+                        raise Exception(f"任务成功但未返回 video_url, response={status_result}")
+                    elif task_status in ("failed", "expired", "cancelled"):
+                        err = status_result.get("error") or {}
+                        err_msg = err.get("message") if isinstance(err, dict) else str(err)
+                        print(f"[haoeedance] task {task_id} {task_status}: {err_msg or 'Unknown error'}")
+                        raise Exception(f"Video generation {task_status}: {err_msg or 'Unknown error'}")
+
+                except requests.exceptions.RequestException as e:
+                    print(f"[haoeedance] poll request error: {e}")
+
+            if not video_url:
+                raise Exception(f"轮询 {max_attempts} 次后仍未获取到 video_url")
+
+            pbar.update_absolute(90)
+
+            if return_last_frame and last_frame_url:
+                print(f"[haoeedance] downloading last_frame: {last_frame_url}")
+                last_frame_tensor = self._download_last_frame(last_frame_url)
+            else:
+                last_frame_tensor = self._empty_image()
+
+            pbar.update_absolute(100)
+            print(f"[haoeedance] done. task_id={task_id}, video_url={video_url}")
+
+            video_adapter = safe_video_adapter(video_url)
+            return (video_adapter, last_frame_tensor, task_id, json.dumps(status_result, ensure_ascii=False))
+
+        except Exception as e:
+            error_message = f"Error generating video: {str(e)}"
+            print(error_message)
+            traceback.print_exc()
+            raise Exception(error_message)
+
+
 class Comfly_HaoeeVideo_grok:
     @classmethod
     def INPUT_TYPES(cls):
@@ -3443,6 +3696,7 @@ NODE_CLASS_MAPPINGS = {
     # "Comfly_HaoeeVideo_Veo3": Comfly_HaoeeVideo_Veo3,
     "Comfly_HaoeeVideo_Wan": Comfly_HaoeeVideo_Wan,
     "Comfly_HaoeeVideo_Doubao": Comfly_HaoeeVideo_Doubao,
+    "Comfly_HaoeeVideo_haoeedance": Comfly_HaoeeVideo_haoeedance,
     "Comfly_HaoeeImage_Gemini": Comfly_HaoeeImage_Gemini,
     "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
     "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
@@ -3467,6 +3721,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # "Comfly_HaoeeVideo_Veo3": "好易 视频 Veo3",
     "Comfly_HaoeeVideo_Wan": "好易 视频 Wan",
     "Comfly_HaoeeVideo_Doubao": "好易 视频 Doubao",
+    "Comfly_HaoeeVideo_haoeedance": "好易 视频 HaoeeDance",
     "Comfly_HaoeeImage_Gemini": "好易 绘图 Gemini",
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
     # "Comfly_HaoeeImage_Gpt_Image2_Generations": "好易 绘图 GPT Image2 图片生成",

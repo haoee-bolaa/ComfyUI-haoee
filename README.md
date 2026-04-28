@@ -1,4 +1,15 @@
 # 网站：[https://www.haoee.com/maas/services](https://www.haoee.com/maas/services)
+
+## 更新日志
+
+- 2026年4月28日：增加《好易 视频 HaoeeDance》节点，包含模型haoeedance-2-0、haoeedance-2-0-fast
+- 2026年4月24日：增加《好易 LLM GPT5.4》节点，包含gpt-5.4、gpt-5.4-pro模型
+- 2026年4月24日：增加 gpt-image-2 测试渠道节点-《好易 绘图 GPT Image2 图片生成(测试渠道)》
+- 2026年4月16日：《好易 绘图 Midjourney》节点增加参数错误提示
+- 2026年4月16日：《好易 视频 Wan》节点修改wan2.6-i2v模型强制使用有声
+- 2026年4月16日：《好易 视频 Kling》节点BUG修改
+
+
 # ****好易智算——ComfyUI工作流调用api说明****
 
 ## ****第一步：在好易智算，申请API Key及账户充值****
@@ -46,12 +57,3 @@
  
 <img width="1590" height="396" alt="d3847520dd93d8e83eeca7b68c8bbf1f" src="https://github.com/user-attachments/assets/95596371-8aec-4d03-b9b1-1bd088092dd8" />
 <img width="900" height="806" alt="2d008ddaf8e0b6515f247cb02a35afaa" src="https://github.com/user-attachments/assets/c17c7632-e83a-4bb3-beec-a709026f69ec" />
-
-
-## 更新日志
-
-- 2026年4月24日：增加《好易 LLM GPT5.4》节点，包含gpt-5.4、gpt-5.4-pro模型
-- 2026年4月24日：增加 gpt-image-2 测试渠道节点-《好易 绘图 GPT Image2 图片生成(测试渠道)》
-- 2026年4月16日：《好易 绘图 Midjourney》节点增加参数错误提示
-- 2026年4月16日：《好易 视频 Wan》节点修改wan2.6-i2v模型强制使用有声
-- 2026年4月16日：《好易 视频 Kling》节点BUG修改
