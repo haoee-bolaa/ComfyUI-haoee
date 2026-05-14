@@ -1,7 +1,8 @@
 # 网站：[https://www.haoee.com/maas/services](https://www.haoee.com/maas/services)
 
 ## 更新日志
-
+- 2026年5月14日：增加《好易 绘图 GPT Image2 VIP》节点
+- 2026年5月14日：修正《好易 视频 Sora2》节点，并移除sora-2-pro模型
 - 2026年4月28日：增加《好易 视频 Seedance》节点，包含模型Seedance-2-0、Seedance-2-0-fast
 - 2026年4月24日：增加《好易 LLM GPT5.4》节点，包含gpt-5.4、gpt-5.4-pro模型
 - 2026年4月24日：增加 gpt-image-2 测试渠道节点-《好易 绘图 GPT Image2 图片生成(测试渠道)》

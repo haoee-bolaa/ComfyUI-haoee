@@ -303,15 +303,15 @@ class Comfly_HaoeeVideo_MiniMax:
             raise Exception(error_message)
 
 
-class Comfly_HaoeeVideo_Sora2:
+class Comfly_HaoeeVideo_Sora2_Pro:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "image": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["sora-2", "sora-2-pro"], {"default": "sora-2"}),
-                "seconds": (["4", "8", "12"],{"default": "4"}),
+                "model": (["sora-2-pro"], {"default": "sora-2-pro"}),
+                "seconds": (["4", "6", "8"], {"default": "4"}),
                 "size": (["720x1280","1280x720","1024x1792","1792x1024"], {"default":"720x1280"}),
                 "apikey": ("STRING", {"default": ""})
             },
@@ -362,11 +362,6 @@ class Comfly_HaoeeVideo_Sora2:
             print(error_message)
             raise Exception(error_message)
 
-        if model == "sora-2" and size not in ["720x1280", "1280x720"]:
-            error_message = "sora-2模型只支持720x1280和1280x720尺寸"
-            print(error_message)
-            raise Exception(error_message)
-        
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
@@ -439,7 +434,7 @@ class Comfly_HaoeeVideo_Sora2:
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
                     
-                    #queued、success、in_progress、failed、completed
+                    # status: queued, in_progress, completed, failed
                     if status == "completed":
                         content_response = requests.get(
                             f"{baseurl}/v1/videos/{task_id}/content",
@@ -475,8 +470,9 @@ class Comfly_HaoeeVideo_Sora2:
                                 print("Content not ready, waiting 3s...")
                                 time.sleep(3)
                     elif status == "failed":
-                        fail_reason = status_data.get("error", {}).get("message", "Unknown error")
-                        error_message = f"Video generation failed: {fail_reason}"
+                        err_obj = status_data.get("error") or {}
+                        fail_reason = err_obj.get("message") if isinstance(err_obj, dict) else str(err_obj)
+                        error_message = f"Video generation failed: {fail_reason or 'Unknown error'}"
                         print(error_message)
                         raise Exception(error_message)
                         
@@ -506,6 +502,192 @@ class Comfly_HaoeeVideo_Sora2:
             
         except Exception as e:
             error_message = f"Error in video generation: {str(e)}"
+            print(error_message)
+            traceback.print_exc()
+            raise Exception(error_message)
+
+
+class Comfly_HaoeeVideo_Sora2:
+    SORA2_CREATE_URL = f"{baseurl}/api/v1/generate_videos"
+    SORA2_QUERY_URL = f"{baseurl}/api/v2/get_task/{{task_id}}"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "prompt": ("STRING", {"multiline": True, "default": ""}),
+                "model": (["sora-2"], {"default": "sora-2"}),
+                "duration_seconds": (["4", "8", "12"], {"default": "4"}),
+                "resolution": (["720x1280", "1280x720", "1024x1792", "1792x1024"], {"default": "720x1280"}),
+                "aspect_ratio": (["16:9", "9:16", "4:3", "3:4", "1:1"], {"default": "16:9"}),
+                "apikey": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "image": ("IMAGE",),
+                "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
+                "fps": ("STRING", {"default": ""}),
+            },
+        }
+
+    RETURN_TYPES = (IO.VIDEO, "STRING", "STRING")
+    RETURN_NAMES = ("video", "task_id", "response")
+    FUNCTION = "generate_video"
+    CATEGORY = "好易/Video"
+
+    def __init__(self):
+        self.timeout = 30
+        self.api_key = None
+
+    def _img_b64(self, image_tensor):
+        return _image_tensor_to_base64(image_tensor, with_prefix=True)
+
+    def generate_video(
+        self,
+        prompt,
+        model,
+        duration_seconds="4",
+        resolution="720x1280",
+        aspect_ratio="16:9",
+        apikey="",
+        image=None,
+        negative_prompt="",
+        fps="",
+    ):
+        if apikey and apikey.strip():
+            self.api_key = apikey.strip()
+
+        if not self.api_key:
+            error_response = {"code": "error", "message": "API key not provided"}
+            raise Exception(json.dumps(error_response, ensure_ascii=False))
+
+        mode = "image_to_video" if image is not None else "text_to_video"
+
+        prompt_preview = (prompt[:80] + "...") if prompt and len(prompt) > 80 else (prompt or "")
+        print(
+            f"[sora-2] call: type={mode}, model={model}, duration_seconds={duration_seconds}, "
+            f"resolution={resolution}, aspect_ratio={aspect_ratio}, "
+            f"image={image is not None}, negative_prompt={'yes' if negative_prompt and negative_prompt.strip() else 'no'}, "
+            f"fps={fps!r}, prompt={prompt_preview!r}"
+        )
+
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "modelName": model,
+            }
+
+            config = {
+                "duration_seconds": str(duration_seconds),
+                "resolution": resolution,
+                "aspect_ratio": aspect_ratio,
+            }
+            if negative_prompt and negative_prompt.strip():
+                config["negative_prompt"] = negative_prompt
+            if fps and fps.strip():
+                config["fps"] = fps
+            if image is not None:
+                config["reference_image_urls"] = [self._img_b64(image)]
+
+            payload = {
+                "type": mode,
+                "channel": "openai",
+                "model": model,
+                "prompt": prompt,
+                "config": config,
+            }
+
+            print(f"[sora-2] POST {self.SORA2_CREATE_URL}")
+            response = requests.post(
+                self.SORA2_CREATE_URL,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+            )
+            pbar.update_absolute(20)
+            print(f"[sora-2] create status={response.status_code}, body={response.text}")
+
+            if response.status_code != 200:
+                raise Exception(f"API Error: {response.status_code} - {response.text}")
+
+            result = response.json()
+            if result.get("code") != 0:
+                raise Exception(f"API Error: code={result.get('code')}, message={result.get('message')}")
+
+            data = result.get("data") or {}
+            task_id = data.get("task_sn")
+            if not task_id:
+                raise Exception(f"未获取到 task_sn, response={result}")
+
+            pbar.update_absolute(30)
+            print(f"[sora-2] task submitted: {task_id}, init state={data.get('task_state')}")
+
+            max_attempts = 60
+            attempts = 0
+            video_url = None
+            status_result = {}
+
+            while attempts < max_attempts:
+                time.sleep(10)
+                attempts += 1
+
+                try:
+                    status_response = requests.get(
+                        self.SORA2_QUERY_URL.format(task_id=task_id),
+                        headers=headers,
+                        timeout=self.timeout,
+                    )
+                    print(f"[sora-2] poll {attempts}: status={status_response.status_code}, body={status_response.text}")
+
+                    if status_response.status_code != 200:
+                        raise Exception(f"Status check failed: {status_response.status_code} - {status_response.text}")
+
+                    status_result = status_response.json()
+                    status_data = status_result.get("data") or {}
+                    state = (status_data.get("state") or "").lower()
+
+                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    pbar.update_absolute(progress_value)
+
+                    print(f"[sora-2] task {task_id} state={state} (attempt {attempts}/{max_attempts})")
+
+                    if state == "success":
+                        file_info = status_data.get("file_info") or []
+                        if isinstance(file_info, list) and file_info:
+                            first = file_info[0] or {}
+                            video_url = first.get("file_url") or first.get("url")
+                        if not video_url:
+                            file_urls = status_data.get("file_urls") or []
+                            if isinstance(file_urls, str):
+                                video_url = file_urls
+                            elif isinstance(file_urls, list) and file_urls:
+                                video_url = file_urls[0]
+                        if video_url:
+                            print(f"[sora-2] task {task_id} succeeded")
+                            break
+                        raise Exception(f"任务成功但未返回视频地址, response={status_result}")
+                    elif state in ("fail", "error"):
+                        stat_desc = status_data.get("stat_desc") or status_result.get("message") or "Unknown error"
+                        print(f"[sora-2] task {task_id} {state}: {stat_desc}")
+                        raise Exception(f"Video generation {state}: {stat_desc}")
+
+                except requests.exceptions.RequestException as e:
+                    print(f"[sora-2] poll request error: {e}")
+
+            if not video_url:
+                raise Exception(f"轮询 {max_attempts} 次后仍未获取到 video_url")
+
+            pbar.update_absolute(100)
+            print(f"[sora-2] done. task_id={task_id}, video_url={video_url}")
+
+            video_adapter = safe_video_adapter(video_url)
+            return (video_adapter, task_id, json.dumps(status_result, ensure_ascii=False))
+
+        except Exception as e:
+            error_message = f"Error generating video: {str(e)}"
             print(error_message)
             traceback.print_exc()
             raise Exception(error_message)
@@ -3167,6 +3349,167 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
             raise Exception(error_message)
 
 
+class Comfly_HaoeeImage_Gpt_Image2_Vip:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "prompt": ("STRING", {"multiline": True}),
+                "model": (["gpt-image-2-vip"], {"default": "gpt-image-2-vip"}),
+                "size": ([
+                    "1024x1024（1K 1:1）", "2048x2048（2K 1:1）", "2880x2880（4K 1:1）",
+                    "1280x720（1K 16:9）", "2048x1152（2K 16:9）", "3840x2160（4K 16:9）",
+                    "720x1280（1K 9:16）", "1152x2048（2K 9:16）", "2160x3840（4K 9:16）",
+                    "1024x768（1K 4:3）", "2048x1536（2K 4:3）", "3264x2448（4K 4:3）",
+                    "768x1024（1K 3:4）", "1536x2048（2K 3:4）", "2448x3264（4K 3:4）",
+                    "1008x672（1K 3:2）", "2016x1344（2K 3:2）", "3504x2336（4K 3:2）",
+                    "672x1008（1K 2:3）", "1344x2016（2K 2:3）", "2336x3504（4K 2:3）",
+                    "1040x832（1K 5:4）", "2080x1664（2K 5:4）", "3200x2560（4K 5:4）",
+                    "832x1040（1K 4:5）", "1664x2080（2K 4:5）", "2560x3200（4K 4:5）",
+                    "1344x576（1K 21:9）", "2016x864（2K 21:9）", "3696x1584（4K 21:9）",
+                ], {"default": "1024x1024（1K 1:1）"}),
+                "api_key": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "image1": ("IMAGE",),
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+                "image4": ("IMAGE",),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("generated_image", "response")
+    FUNCTION = "generate_image"
+    CATEGORY = "好易/Image"
+
+    def __init__(self):
+        self.timeout = 300
+        self.api_key = None
+
+    def generate_image(self, prompt, model, size, api_key,
+                       image1=None, image2=None, image3=None, image4=None, seed=0):
+        log_prefix = "[HaoeeGptImg2-Vip]"
+        ref_count = sum(1 for x in [image1, image2, image3, image4] if x is not None)
+        api_size = size.split("（", 1)[0].strip() if size else size
+        print(f"{log_prefix} ==> start: model={model}, size={size} (api={api_size}), "
+              f"prompt_len={len(prompt)}, ref_images={ref_count}, seed={seed}")
+
+        if api_key.strip():
+            self.api_key = api_key
+            print(f"{log_prefix} api_key overridden by input (len={len(api_key.strip())})")
+
+        if not self.api_key:
+            error_message = "API key not found"
+            print(f"{log_prefix} ERROR: {error_message}")
+            raise Exception(error_message)
+
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "modelName": model,
+                "lineType": "main",
+            }
+
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "size": api_size,
+                "shutProgress": True,
+            }
+
+            refs = []
+            for img in [image1, image2, image3, image4]:
+                if img is not None:
+                    refs.append(_image_tensor_to_base64(img, with_prefix=True))
+            if refs:
+                payload["urls"] = refs
+            print(f"{log_prefix} payload={_haoee_safe_payload_for_log(payload)}")
+
+            pbar.update_absolute(25)
+            request_url = f"{baseurl}/v1/draw/completions"
+            print(f"{log_prefix} POST {request_url}")
+
+            response = requests.post(
+                request_url,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+            )
+            content_type = response.headers.get("Content-Type", "")
+            print(f"{log_prefix} response.status_code={response.status_code}, url={response.url}, content_type={content_type!r}")
+
+            if response.status_code != 200:
+                try:
+                    body_text = response.text
+                except Exception:
+                    body_text = "<unreadable>"
+                print(f"{log_prefix} ERROR: non-200 response, body={body_text}")
+                raise Exception(f"API Error: {response.status_code} - {body_text}")
+
+            try:
+                result = response.json()
+                print(f"{log_prefix} parsed as plain JSON")
+            except Exception as je:
+                raw_text = response.text or ""
+                print(f"{log_prefix} plain JSON parse failed ({je}); falling back to SSE-style data: prefix parsing")
+                result = None
+                last_evt = None
+                for raw_line in raw_text.splitlines():
+                    line = raw_line.strip()
+                    if not line.startswith("data:"):
+                        continue
+                    data_str = line[len("data:"):].strip()
+                    if not data_str or data_str == "[DONE]":
+                        continue
+                    try:
+                        evt = json.loads(data_str)
+                    except Exception:
+                        continue
+                    last_evt = evt
+                    if isinstance(evt, dict) and evt.get("status") == "succeeded":
+                        result = evt
+                        break
+                if result is None:
+                    result = last_evt
+                if result is None:
+                    preview = raw_text[:500]
+                    raise Exception(f"Failed to parse response body, preview={preview!r}")
+                print(f"{log_prefix} parsed via SSE-style fallback")
+
+            status = (result.get("status") if isinstance(result, dict) else "") or ""
+            failure_reason = ((result.get("failure_reason") if isinstance(result, dict) else "") or "").strip()
+            err = ((result.get("error") if isinstance(result, dict) else "") or "").strip()
+            print(f"{log_prefix} result status={status!r}, progress={result.get('progress') if isinstance(result, dict) else 'n/a'}")
+
+            if failure_reason or err or status == "failed":
+                msg = failure_reason or err or "task failed"
+                print(f"{log_prefix} ERROR: task failed: {msg}, full={json.dumps(result, ensure_ascii=False)}")
+                raise Exception(f"Task failed: {msg}")
+            if status and status != "succeeded":
+                print(f"{log_prefix} WARN: unexpected status={status!r}, full={json.dumps(result, ensure_ascii=False)}")
+
+            pbar.update_absolute(85)
+
+            combined_tensor, response_info = _haoee_parse_results_payload(
+                result, prompt, model, size,
+            )
+            print(f"{log_prefix} parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
+            pbar.update_absolute(100)
+            print(f"{log_prefix} <== done")
+            return (combined_tensor, response_info)
+
+        except Exception as e:
+            error_message = f"Error in image generation (vip): {str(e)}"
+            print(f"{log_prefix} EXCEPTION: {e}")
+            raise Exception(error_message)
+
+
 class Comfly_HaoeeImage_Gpt_Image2_Edit:
     @classmethod
     def INPUT_TYPES(cls):
@@ -3697,6 +4040,7 @@ class Comfly_HaoeeTextGPT5_4:
 NODE_CLASS_MAPPINGS = {
     "Comfly_Haoee_api_key": Comfly_Haoee_api_key,
     "Comfly_HaoeeVideo_MiniMax": Comfly_HaoeeVideo_MiniMax,
+    # "Comfly_HaoeeVideo_Sora2_Pro": Comfly_HaoeeVideo_Sora2_Pro,
     "Comfly_HaoeeVideo_Sora2": Comfly_HaoeeVideo_Sora2,
     "Comfly_HaoeeVideo_Kling": Comfly_HaoeeVideo_Kling,
     # "Comfly_HaoeeVideo_vidu": Comfly_HaoeeVideo_vidu,
@@ -3709,6 +4053,7 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
     # "Comfly_HaoeeImage_Gpt_Image2_Generations": Comfly_HaoeeImage_Gpt_Image2_Generations,
     "Comfly_HaoeeImage_Gpt_Image2_Generations_Test": Comfly_HaoeeImage_Gpt_Image2_Generations_Test,
+    "Comfly_HaoeeImage_Gpt_Image2_Vip": Comfly_HaoeeImage_Gpt_Image2_Vip,
     # "Comfly_HaoeeImage_Gpt_Image2_Edit": Comfly_HaoeeImage_Gpt_Image2_Edit,
     "Comfly_HaoeeImage_Midjourney": Comfly_HaoeeImage_Midjourney,
     # "Comfly_HaoeeImage_Nano_banana2": Comfly_HaoeeImage_Nano_banana2,
@@ -3722,6 +4067,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_Haoee_api_key": "好易 API Key",
     "Comfly_HaoeeVideo_MiniMax": "好易 视频 MiniMax",
+    # "Comfly_HaoeeVideo_Sora2_Pro": "好易 视频 Sora2 Pro",
     "Comfly_HaoeeVideo_Sora2": "好易 视频 Sora2",
     "Comfly_HaoeeVideo_Kling": "好易 视频 Kling",
     # "Comfly_HaoeeVideo_vidu": "好易 视频 Vidu",
@@ -3733,6 +4079,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
     # "Comfly_HaoeeImage_Gpt_Image2_Generations": "好易 绘图 GPT Image2 图片生成",
     "Comfly_HaoeeImage_Gpt_Image2_Generations_Test": "好易 绘图 GPT Image2 图片生成(测试渠道)",
+    "Comfly_HaoeeImage_Gpt_Image2_Vip": "好易 绘图 GPT Image2 VIP",
     # "Comfly_HaoeeImage_Gpt_Image2_Edit": "好易 绘图 GPT Image2 图片编辑",
     "Comfly_HaoeeImage_Doubao_Seedream": "好易 绘图 Doubao Seedream",
     "Comfly_HaoeeImage_Midjourney": "好易 绘图 Midjourney",
