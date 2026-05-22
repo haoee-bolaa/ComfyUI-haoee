@@ -115,6 +115,8 @@ class ComflyVideoAdapter:
 
 
 class Comfly_Haoee_api_key:
+    NODE_NAME = "ApiKey"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -133,6 +135,8 @@ class Comfly_Haoee_api_key:
 
 
 class Comfly_HaoeeVideo_MiniMax:
+    NODE_NAME = "MiniMax"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -164,16 +168,13 @@ class Comfly_HaoeeVideo_MiniMax:
     def generate_video(self, prompt, model="MiniMax-Hailuo-02", duration="6", resolution="768P", prompt_optimizer=True, image=None, api_key="", seed=0):
         if api_key.strip():
             self.api_key = api_key
-            
+
         if not self.api_key:
-            error_response = {"status": "error", "message": "错误，未配置api_key"}
-            raise Exception(json.dumps(error_response, ensure_ascii=False))
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
         if image is None:
-            error_message = "错误，未配置image"
-            print(error_message)
-            raise Exception(error_message)
-            
+            _haoee_raise_local(self.NODE_NAME, "image not provided")
+
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
@@ -203,27 +204,25 @@ class Comfly_HaoeeVideo_MiniMax:
             )
             
             pbar.update_absolute(20)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
-            
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                raise Exception(error_message)
-                
+                _haoee_raise_http(self.NODE_NAME, response, hint="create task")
+
             result = response.json()
             task_id = result.get("task_id")
 
             if not task_id:
-                error_message = "错误，未获取到task_id"
-                print(error_message)
-                raise Exception(error_message)
-            
+                _haoee_raise_parse(self.NODE_NAME, "task_id missing in create response", preview=str(result))
+
             pbar.update_absolute(30)
-            print(f"Video generation task submitted. Task ID: {task_id}")
+            _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
 
             max_attempts = 60  
             attempts = 0
             file_id = None
             video_url = None
+            status_result = {}
             
             while attempts < max_attempts:
                 time.sleep(10)  
@@ -235,12 +234,11 @@ class Comfly_HaoeeVideo_MiniMax:
                         headers=headers,
                         timeout=self.timeout
                     )
-                    print(f"Request sent to {status_response.url}. Response status code: {status_response.status_code}, Response text: {status_response.text}")
-                    
+                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+
                     if status_response.status_code != 200:
-                        error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        raise Exception(error_message)
-                        
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
+
                     status_result = status_response.json()
                     state = status_result["data"]["state"]
                     
@@ -270,12 +268,12 @@ class Comfly_HaoeeVideo_MiniMax:
                             )
                         break
                     elif state == "failed":
-                        error_message = f"Video generation failed: {status_result.get('base_resp', {}).get('status_msg', 'Unknown error')}"
-                        print(error_message)
-                        raise Exception(error_message)
-                    
+                        fail_msg = status_result.get('base_resp', {}).get('status_msg', 'Unknown error')
+                        _haoee_raise_api(self.NODE_NAME, f"task failed: {fail_msg}")
+
                 except requests.exceptions.RequestException as e:
-                    print(f"Error checking generation status: {str(e)}")
+                    _haoee_log(self.NODE_NAME, f"poll request error: {e}")
+
             pbar.update_absolute(100)
             if not video_url:
                 return (
@@ -283,8 +281,8 @@ class Comfly_HaoeeVideo_MiniMax:
                     task_id,
                     json.dumps(status_result, ensure_ascii=False)
                 )
-            print(f"Video generation completed. URL: {video_url}")
-            
+            _haoee_log(self.NODE_NAME, f"done video_url={video_url}")
+
             video_adapter = ComflyVideoAdapter(video_url)
             
             response_data = {
@@ -295,15 +293,19 @@ class Comfly_HaoeeVideo_MiniMax:
             }
             
             return (video_adapter, task_id, json.dumps(response_data, ensure_ascii=False))
-            
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error generating video: {str(e)}"
-            print(error_message)
             traceback.print_exc()
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeVideo_Sora2_Pro:
+    NODE_NAME = "Sora2Pro"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -345,22 +347,17 @@ class Comfly_HaoeeVideo_Sora2_Pro:
     def process(self, prompt, model,  seconds="4", size="720x1280", apikey="", image=None, seed=0):
         if apikey.strip():
             self.api_key = apikey
-            
+
         if not self.api_key:
-            error_response = {"status": "error", "message": "API key not provided or not found in config"}
-            raise Exception(json.dumps(error_response, ensure_ascii=False))
-            
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
         if image is None:
-            error_message = "Image not provided"
-            print(error_message)
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, "image not provided")
 
         width, height = self.get_image_size(image)
 
         if (width, height) not in [(1280, 720), (720, 1280), (1024, 1792), (1792, 1024)]:
-            error_message = "图片尺寸必须为 1280x720, 720x1280, 1024x1792, or 1792x1024"
-            print(error_message)
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, f"image size must be one of 1280x720/720x1280/1024x1792/1792x1024, got {width}x{height}")
 
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -391,49 +388,45 @@ class Comfly_HaoeeVideo_Sora2_Pro:
                 timeout=self.timeout
             )
             pbar.update_absolute(20)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
-            
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                raise Exception(error_message)
-                
+                _haoee_raise_http(self.NODE_NAME, response, hint="create task")
+
             result = response.json()
             task_id = result.get("id")
-            
-            if not task_id:
-                error_message = "No task ID in API response"
-                print(error_message)
-                raise Exception(error_message)
-            
-            pbar.update_absolute(30)
-            print(f"Video generation task submitted. Task ID: {task_id}")
 
-            max_attempts = 80  
+            if not task_id:
+                _haoee_raise_parse(self.NODE_NAME, "task id missing in create response", preview=str(result))
+
+            pbar.update_absolute(30)
+            _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
+
+            max_attempts = 80
             attempts = 0
             video_url = None
-            
+
             while attempts < max_attempts:
                 time.sleep(5)
                 attempts += 1
-                
+
                 try:
                     status_response = requests.get(
                         f"{baseurl}/v1/videos/{task_id}",
                         headers=headers,
                         timeout=self.timeout
                     )
-                    print(f"Request sent to {status_response.url}. Response status code: {status_response.status_code}, Response text: {status_response.text}")
-                    
+                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+
                     if status_response.status_code != 200:
-                        error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        raise Exception(error_message)
-                        
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
+
                     status_data = status_response.json()
                     status = status_data.get("status")
 
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
-                    
+
                     # status: queued, in_progress, completed, failed
                     if status == "completed":
                         content_response = requests.get(
@@ -452,7 +445,7 @@ class Comfly_HaoeeVideo_Sora2_Pro:
                                 for chunk in content_response.iter_content(8192):
                                     if chunk:
                                         f.write(chunk)
-                            print("Video saved:", file_path)
+                            _haoee_log(self.NODE_NAME, f"video saved: {file_path}")
                             video_url = file_path
                             break
                         # 如果是 JSON
@@ -460,34 +453,30 @@ class Comfly_HaoeeVideo_Sora2_Pro:
                             try:
                                 content_data = content_response.json()
                                 video_url = content_data.get("url", "")
-                            except:
+                            except Exception:
                                 video_url = ""
 
                             if video_url:
-                                print("Video URL ready:", video_url)
+                                _haoee_log(self.NODE_NAME, f"video URL ready: {video_url}")
                                 break
                             else:
-                                print("Content not ready, waiting 3s...")
+                                _haoee_log(self.NODE_NAME, "content not ready, waiting 3s...")
                                 time.sleep(3)
                     elif status == "failed":
                         err_obj = status_data.get("error") or {}
                         fail_reason = err_obj.get("message") if isinstance(err_obj, dict) else str(err_obj)
-                        error_message = f"Video generation failed: {fail_reason or 'Unknown error'}"
-                        print(error_message)
-                        raise Exception(error_message)
-                        
+                        _haoee_raise_api(self.NODE_NAME, f"task failed: {fail_reason or 'Unknown error'}")
+
                 except requests.exceptions.RequestException as e:
-                    print(f"Error checking task status: {str(e)}")
-            
+                    _haoee_log(self.NODE_NAME, f"poll request error: {e}")
+
             if not video_url:
-                error_message = f"Failed to get video URL after {max_attempts} attempts"
-                print(error_message)
-                raise Exception(error_message)
-            
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video URL after {max_attempts} attempts")
+
             video_adapter = ComflyVideoAdapter(video_url)
-            
+
             pbar.update_absolute(100)
-            
+
             response_data = {
                 "status": "success",
                 "model": model,
@@ -497,17 +486,20 @@ class Comfly_HaoeeVideo_Sora2_Pro:
                 "task_id": task_id,
                 "video_url": video_url
             }
-            
+
             return (video_adapter, task_id, json.dumps(response_data, ensure_ascii=False))
-            
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error in video generation: {str(e)}"
-            print(error_message)
             traceback.print_exc()
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeVideo_Sora2:
+    NODE_NAME = "Sora2"
     SORA2_CREATE_URL = f"{baseurl}/api/v1/generate_videos"
     SORA2_QUERY_URL = f"{baseurl}/api/v2/get_task/{{task_id}}"
 
@@ -557,14 +549,14 @@ class Comfly_HaoeeVideo_Sora2:
             self.api_key = apikey.strip()
 
         if not self.api_key:
-            error_response = {"code": "error", "message": "API key not provided"}
-            raise Exception(json.dumps(error_response, ensure_ascii=False))
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
         mode = "image_to_video" if image is not None else "text_to_video"
 
         prompt_preview = (prompt[:80] + "...") if prompt and len(prompt) > 80 else (prompt or "")
-        print(
-            f"[sora-2] call: type={mode}, model={model}, duration_seconds={duration_seconds}, "
+        _haoee_log(
+            self.NODE_NAME,
+            f"call: type={mode}, model={model}, duration_seconds={duration_seconds}, "
             f"resolution={resolution}, aspect_ratio={aspect_ratio}, "
             f"image={image is not None}, negative_prompt={'yes' if negative_prompt and negative_prompt.strip() else 'no'}, "
             f"fps={fps!r}, prompt={prompt_preview!r}"
@@ -600,7 +592,7 @@ class Comfly_HaoeeVideo_Sora2:
                 "config": config,
             }
 
-            print(f"[sora-2] POST {self.SORA2_CREATE_URL}")
+            _haoee_log(self.NODE_NAME, f"POST {self.SORA2_CREATE_URL}")
             response = requests.post(
                 self.SORA2_CREATE_URL,
                 headers=headers,
@@ -608,22 +600,22 @@ class Comfly_HaoeeVideo_Sora2:
                 timeout=self.timeout,
             )
             pbar.update_absolute(20)
-            print(f"[sora-2] create status={response.status_code}, body={response.text}")
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
 
             if response.status_code != 200:
-                raise Exception(f"API Error: {response.status_code} - {response.text}")
+                _haoee_raise_http(self.NODE_NAME, response, hint="create task")
 
             result = response.json()
             if result.get("code") != 0:
-                raise Exception(f"API Error: code={result.get('code')}, message={result.get('message')}")
+                _haoee_raise_api(self.NODE_NAME, f"create failed: code={result.get('code')}, message={result.get('message')}")
 
             data = result.get("data") or {}
             task_id = data.get("task_sn")
             if not task_id:
-                raise Exception(f"未获取到 task_sn, response={result}")
+                _haoee_raise_parse(self.NODE_NAME, "task_sn missing in create response", preview=str(result))
 
             pbar.update_absolute(30)
-            print(f"[sora-2] task submitted: {task_id}, init state={data.get('task_state')}")
+            _haoee_log(self.NODE_NAME, f"task submitted: {task_id}, init state={data.get('task_state')}")
 
             max_attempts = 60
             attempts = 0
@@ -640,10 +632,10 @@ class Comfly_HaoeeVideo_Sora2:
                         headers=headers,
                         timeout=self.timeout,
                     )
-                    print(f"[sora-2] poll {attempts}: status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
 
                     if status_response.status_code != 200:
-                        raise Exception(f"Status check failed: {status_response.status_code} - {status_response.text}")
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
 
                     status_result = status_response.json()
                     status_data = status_result.get("data") or {}
@@ -652,7 +644,7 @@ class Comfly_HaoeeVideo_Sora2:
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
 
-                    print(f"[sora-2] task {task_id} state={state} (attempt {attempts}/{max_attempts})")
+                    _haoee_log(self.NODE_NAME, f"task {task_id} state={state} (attempt {attempts}/{max_attempts})")
 
                     if state == "success":
                         file_info = status_data.get("file_info") or []
@@ -666,34 +658,37 @@ class Comfly_HaoeeVideo_Sora2:
                             elif isinstance(file_urls, list) and file_urls:
                                 video_url = file_urls[0]
                         if video_url:
-                            print(f"[sora-2] task {task_id} succeeded")
+                            _haoee_log(self.NODE_NAME, f"task {task_id} succeeded")
                             break
-                        raise Exception(f"任务成功但未返回视频地址, response={status_result}")
+                        _haoee_raise_parse(self.NODE_NAME, "success but no video url in response", preview=str(status_result))
                     elif state in ("fail", "error"):
                         stat_desc = status_data.get("stat_desc") or status_result.get("message") or "Unknown error"
-                        print(f"[sora-2] task {task_id} {state}: {stat_desc}")
-                        raise Exception(f"Video generation {state}: {stat_desc}")
+                        _haoee_raise_api(self.NODE_NAME, f"task {state}: {stat_desc}")
 
                 except requests.exceptions.RequestException as e:
-                    print(f"[sora-2] poll request error: {e}")
+                    _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not video_url:
-                raise Exception(f"轮询 {max_attempts} 次后仍未获取到 video_url")
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
 
             pbar.update_absolute(100)
-            print(f"[sora-2] done. task_id={task_id}, video_url={video_url}")
+            _haoee_log(self.NODE_NAME, f"done task_id={task_id}, video_url={video_url}")
 
             video_adapter = safe_video_adapter(video_url)
             return (video_adapter, task_id, json.dumps(status_result, ensure_ascii=False))
 
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error generating video: {str(e)}"
-            print(error_message)
             traceback.print_exc()
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeVideo_Kling:
+    NODE_NAME = "Kling"
+
     @classmethod 
     def INPUT_TYPES(cls):
         return {
@@ -729,15 +724,12 @@ class Comfly_HaoeeVideo_Kling:
     def generate_video(self, image, prompt, model, duration, api_key, negative_prompt="", seed=0, image_tail=None, **kwargs):
         if api_key.strip():
             self.api_key = api_key
-            
+
         if not self.api_key:
-            error_response = {"task_status": "failed", "task_status_msg": "API key not found in Comflyapi.json"}
-            raise Exception(json.dumps(error_response, ensure_ascii=False))
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
         if image is None:
-            error_message = "Image not provided"
-            print(error_message)
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, "image not provided")
 
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -823,32 +815,27 @@ class Comfly_HaoeeVideo_Kling:
                 )
                 
             pbar.update_absolute(20)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
 
             if response.status_code != 200:
-                error_message = f"Error: {response.status_code} {response.reason} - {response.text}"
-                error_response = {"task_status": "failed", "task_status_msg": error_message}
-                raise Exception(json.dumps(error_response, ensure_ascii=False))
-            
+                _haoee_raise_http(self.NODE_NAME, response, hint="create task")
+
             result = response.json()
             if result["code"] != 0:
-                error_response = {"task_status": "failed", "task_status_msg": f"API Error: {result['message']}"}
-                raise Exception(json.dumps(error_response, ensure_ascii=False))
-                
+                _haoee_raise_api(self.NODE_NAME, f"create failed: code={result.get('code')}, message={result.get('message')}")
+
             task_id = result["data"]["task_id"]
-            
+
             if not task_id:
-                error_message = "No task ID in API response"
-                print(error_message)
-                raise Exception(error_message)
-            
+                _haoee_raise_parse(self.NODE_NAME, "task_id missing in create response", preview=str(result))
+
             pbar.update_absolute(30)
-            print(f"Video generation task submitted. Task ID: {task_id}")
-            
-            max_attempts = 60  
+            _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
+
+            max_attempts = 60
             attempts = 0
             video_url = None
-            
+
             while attempts < max_attempts:
                 time.sleep(10)
                 attempts += 1
@@ -860,46 +847,41 @@ class Comfly_HaoeeVideo_Kling:
                             headers=headers,
                             timeout=self.timeout
                         )
-                    else:     
+                    else:
                         status_response = requests.get(
                             f"{baseurl}/kling/v1/videos/image2video/{task_id}",
                             headers=headers,
                             timeout=self.timeout
                         )
-                    print(f"Request sent to {status_response.url}. Response status code: {status_response.status_code}, Response text: {status_response.text}")
+                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
 
                     if status_response.status_code != 200:
-                        error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        raise Exception(error_message)
-                        
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
+
                     status_data = status_response.json()
                     status = status_data["data"]["task_status"]
 
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
-                    
+
                     if status == "succeed":
                         video_url = status_data["data"]["task_result"]["videos"][0]["url"]
                         break
-                            
+
                     elif status == "failed":
                         fail_reason = status_data["data"].get("task_status_msg", "Unknown error")
-                        error_message = f"Video generation failed: {fail_reason}"
-                        print(error_message)
-                        raise Exception(error_message)
+                        _haoee_raise_api(self.NODE_NAME, f"task failed: {fail_reason}")
 
                 except requests.exceptions.RequestException as e:
-                    print(f"Error checking task status: {str(e)}")
+                    _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not video_url:
-                error_message = f"Failed to get video URL after {max_attempts} attempts"
-                print(error_message)
-                raise Exception(error_message)
-            
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+
             video_adapter = ComflyVideoAdapter(video_url)
-            
+
             pbar.update_absolute(100)
-            
+
             response_data = {
                 "status": "success",
                 "task_id": task_id,
@@ -909,16 +891,21 @@ class Comfly_HaoeeVideo_Kling:
                 "mode": mode,
                 "video_url": video_url
             }
-            
+
             return (video_adapter, task_id, json.dumps(response_data, ensure_ascii=False))
 
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_response = {"task_status": "failed", "task_status_msg": f"Error generating video: {str(e)}"}
-            print(f"Error generating video: {str(e)}")
-            raise Exception(json.dumps(error_response, ensure_ascii=False))
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeVideo_vidu:
+    NODE_NAME = "Vidu"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -954,16 +941,13 @@ class Comfly_HaoeeVideo_vidu:
         
         if api_key.strip():
             self.api_key = api_key
-            
+
         if not self.api_key:
-            error_response = {"task_status": "failed", "task_status_msg": "API key not found"}
-            raise Exception(json.dumps(error_response, ensure_ascii=False))
-        
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
         if image is None:
-            error_message = "Image not provided"
-            print(error_message)
-            raise Exception(error_message)
-            
+            _haoee_raise_local(self.NODE_NAME, "image not provided")
+
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
@@ -996,75 +980,67 @@ class Comfly_HaoeeVideo_vidu:
             )
 
             pbar.update_absolute(20)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
-            
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                raise Exception(error_message)
-                
+                _haoee_raise_http(self.NODE_NAME, response, hint="create task")
+
             result = response.json()
             task_id = result.get("task_id")
-            
+
             if not task_id:
-                error_message = "No task ID in API response"
-                print(error_message)
-                raise Exception(error_message)
-                
+                _haoee_raise_parse(self.NODE_NAME, "task_id missing in create response", preview=str(result))
+
             pbar.update_absolute(30)
-            print(f"Video generation task submitted. Task ID: {task_id}")
+            _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
 
             max_attempts = 60
             attempts = 0
             video_url = None
-            
+
             while attempts < max_attempts:
                 time.sleep(10)
                 attempts += 1
-                
+
                 try:
                     status_response = requests.get(
                         f"{baseurl}/ent/v2/tasks/{task_id}/creations",
                         headers=headers,
                         timeout=self.timeout
                     )
-                    print(f"Request sent to {status_response.url}. Response status code: {status_response.status_code}, Response text: {status_response.text}")
-                    
+                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+
                     if status_response.status_code != 200:
-                        error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        raise Exception(error_message)
-                        
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
+
                     status_result = status_response.json()
                     state = status_result.get("state", "")
 
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
-                    
+
                     if state == "success":
                         creations = status_result.get("creations", [])
                         if creations and len(creations) > 0:
                             video_url = creations[0].get("url", "")
                             if video_url:
-                                print(f"Video URL found: {video_url}")
+                                _haoee_log(self.NODE_NAME, f"video url: {video_url}")
                                 break
                     elif state == "failed":
                         err_code = status_result.get("err_code", "Unknown error")
-                        error_message = f"Video generation failed: {err_code}"
-                        print(error_message)
-                        raise Exception(error_message)
-                        
+                        _haoee_raise_api(self.NODE_NAME, f"task failed: {err_code}")
+
                 except requests.exceptions.RequestException as e:
-                    print(f"Error checking generation status (attempt {attempts}): {str(e)}")
-            
+                    _haoee_log(self.NODE_NAME, f"poll request error (attempt {attempts}): {e}")
+
             if not video_url:
-                error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
-                print(error_message)
-                raise Exception(error_message)
-            
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+
             pbar.update_absolute(100)
-            print(f"Video generation completed. URL: {video_url}")
+            _haoee_log(self.NODE_NAME, f"done video_url={video_url}")
 
             video_adapter = ComflyVideoAdapter(video_url)
-            
+
             response_data = {
                 "status": "success",
                 "task_id": task_id,
@@ -1076,15 +1052,19 @@ class Comfly_HaoeeVideo_vidu:
             }
             
             return (video_adapter, task_id, json.dumps(response_data, ensure_ascii=False))
-            
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error generating video: {str(e)}"
-            print(error_message)
             traceback.print_exc()
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeVideo_Veo3:
+    NODE_NAME = "Veo3"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -1115,16 +1095,13 @@ class Comfly_HaoeeVideo_Veo3:
     def generate_video(self, prompt, model="veo3", enhance_prompt=False, aspect_ratio="16:9", apikey="", image=None, seed=0):
         if apikey.strip():
             self.api_key = apikey
-            
+
         if not self.api_key:
-            error_response = {"code": "error", "message": "API key not found in Comflyapi.json"}
-            raise Exception(json.dumps(error_response, ensure_ascii=False))
-    
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
         if image is None:
-            error_message = "Image not provided"
-            print(error_message)
-            raise Exception(error_message)
-            
+            _haoee_raise_local(self.NODE_NAME, "image not provided")
+
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
@@ -1153,42 +1130,39 @@ class Comfly_HaoeeVideo_Veo3:
             )
 
             pbar.update_absolute(20)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
-            
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                raise Exception(error_message)
-                
+                _haoee_raise_http(self.NODE_NAME, response, hint="create task")
+
             result = response.json()
             task_id = result.get("task_id")
-                
-            if not task_id:
-                error_message = "No task ID returned from API"
-                print(error_message)
-                raise Exception(error_message)
-            
-            pbar.update_absolute(30)
 
-            max_attempts = 60  
+            if not task_id:
+                _haoee_raise_parse(self.NODE_NAME, "task_id missing in create response", preview=str(result))
+
+            pbar.update_absolute(30)
+            _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
+
+            max_attempts = 60
             attempts = 0
             video_url = None
-            
+
             while attempts < max_attempts:
                 time.sleep(10)
                 attempts += 1
-                
+
                 try:
                     status_response = requests.get(
                         f"{baseurl}/v2/videos/generations/{task_id}",
                         headers=headers,
                         timeout=self.timeout
                     )
-                    print(f"Request sent to {status_response.url}. Response status code: {status_response.status_code}, Response text: {status_response.text}")
-                    
+                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+
                     if status_response.status_code != 200:
-                        error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        raise Exception(error_message)
-                        
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
+
                     status_result = status_response.json()
                     status = status_result.get("status", "")
 
@@ -1201,21 +1175,17 @@ class Comfly_HaoeeVideo_Veo3:
                             break
                     elif status == "FAILURE":
                         fail_reason = status_result.get("fail_reason", "Unknown error")
-                        error_message = f"Video generation failed: {fail_reason}"
-                        print(error_message)
-                        raise Exception(error_message)
-                        
+                        _haoee_raise_api(self.NODE_NAME, f"task failed: {fail_reason}")
+
                 except requests.exceptions.RequestException as e:
-                    print(f"Error checking generation status: {str(e)}")
-            
+                    _haoee_log(self.NODE_NAME, f"poll request error: {e}")
+
             if not video_url:
-                error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
-                print(error_message)
-                raise Exception(error_message)
-            
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+
             pbar.update_absolute(100)
-            print(f"Video generation completed. URL: {video_url}")
-            
+            _haoee_log(self.NODE_NAME, f"done video_url={video_url}")
+
             response_data = {
                 "code": "success",
                 "task_id": task_id,
@@ -1225,17 +1195,22 @@ class Comfly_HaoeeVideo_Veo3:
                 "aspect_ratio": aspect_ratio,
                 "video_url": video_url,
             }
-            
+
             video_adapter = ComflyVideoAdapter(video_url)
             return (video_adapter, task_id, json.dumps(response_data, ensure_ascii=False))
-            
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error generating video: {str(e)}"
-            print(error_message)
-            raise Exception(error_message)
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
         
 
 class Comfly_HaoeeVideo_Wan:
+    NODE_NAME = "Wan"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -1271,15 +1246,12 @@ class Comfly_HaoeeVideo_Wan:
     def generate_video(self, model, prompt, negative_prompt, resolution="720P", duration="5", prompt_extend=False, shot_type="single", audio=False, watermark=False, apikey="", image=None, seed=0):
         if apikey.strip():
             self.api_key = apikey
-            
+
         if not self.api_key:
-            error_response = {"code": "error", "message": "API key not found in Comflyapi.json"}
-            raise Exception(json.dumps(error_response, ensure_ascii=False))
-    
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
         if image is None:
-            error_message = "Image not provided"
-            print(error_message)
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, "image not provided")
 
         if model == "wan2.6-i2v" and not audio:
             audio = True
@@ -1321,42 +1293,42 @@ class Comfly_HaoeeVideo_Wan:
             )
 
             pbar.update_absolute(20)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
-            
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                raise Exception(error_message)
-                
+                _haoee_raise_http(self.NODE_NAME, response, hint="create task")
+
             result = response.json()
             task_id = result.get("output", {}).get("task_id")
-                
-            if not task_id:
-                error_message = result.get("message", "No task ID returned from API") 
-                print(error_message)
-                raise Exception(error_message)
-            
-            pbar.update_absolute(30)
 
-            max_attempts = 60  
+            if not task_id:
+                fail_msg = result.get("message")
+                if fail_msg:
+                    _haoee_raise_api(self.NODE_NAME, f"create failed: {fail_msg}")
+                _haoee_raise_parse(self.NODE_NAME, "task_id missing in create response", preview=str(result))
+
+            pbar.update_absolute(30)
+            _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
+
+            max_attempts = 60
             attempts = 0
             video_url = None
-            
+
             while attempts < max_attempts:
                 time.sleep(10)
                 attempts += 1
-                
+
                 try:
                     status_response = requests.get(
                         f"{baseurl}/api/v1/tasks/{task_id}",
                         headers=headers,
                         timeout=self.timeout
                     )
-                    print(f"Request sent to {status_response.url}. Response status code: {status_response.status_code}, Response text: {status_response.text}")
-                    
+                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+
                     if status_response.status_code != 200:
-                        error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        raise Exception(error_message)
-                        
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
+
                     status_result = status_response.json()
                     status = status_result.get("output", {}).get("task_status")
 
@@ -1368,21 +1340,17 @@ class Comfly_HaoeeVideo_Wan:
                         break
                     elif status == "FAILED":
                         fail_reason = status_result.get("output", {}).get("message", "Unknown error")
-                        error_message = f"Video generation failed: {fail_reason}"
-                        print(error_message)
-                        raise Exception(error_message)
-                        
+                        _haoee_raise_api(self.NODE_NAME, f"task failed: {fail_reason}")
+
                 except requests.exceptions.RequestException as e:
-                    print(f"Error checking generation status: {str(e)}")
-            
+                    _haoee_log(self.NODE_NAME, f"poll request error: {e}")
+
             if not video_url:
-                error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
-                print(error_message)
-                raise Exception(error_message)
-            
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+
             pbar.update_absolute(100)
-            print(f"Video generation completed. URL: {video_url}")
-            
+            _haoee_log(self.NODE_NAME, f"done video_url={video_url}")
+
             response_data = {
                 "code": "success",
                 "task_id": task_id,
@@ -1397,13 +1365,16 @@ class Comfly_HaoeeVideo_Wan:
             
             video_adapter = ComflyVideoAdapter(video_url)
             return (video_adapter, task_id, json.dumps(response_data, ensure_ascii=False))
-            
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error generating video: {str(e)}"
-            print(error_message)
-            raise Exception(error_message)
-   
-        
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
+
+
 def safe_video_adapter(video_url=None):
     if not video_url:
         return None
@@ -1414,7 +1385,70 @@ def safe_video_adapter(video_url=None):
         return None
 
 
+# ===== Unified node logging & error helpers =====
+# 异常 message 统一格式: [<NodeName>][<LEVEL>] <message>
+# 5 类 LEVEL:
+#   LOCAL     节点本地校验/前置错误 (缺参数、本地 IO 等)
+#   API_HTTP  接口 HTTP 非 200
+#   API_ERR   接口业务错误 (HTTP 200 但 code/status/error.message 异常)
+#   NETWORK   网络层异常 (timeout/DNS/连接拒绝)
+#   PARSE     节点本地解析响应失败 (JSON 解析失败、字段缺失)
+
+
+class HaoeeNodeError(Exception):
+    """Haoee 节点已分类异常基类。
+
+    外层 try/except 捕获到此类型时应原样 re-raise，避免在 message 上再加一层前缀。
+    """
+
+
+def _haoee_log(node, msg):
+    print(f"[{node}] {msg}")
+
+
+def _haoee_raise_local(node, msg):
+    full = f"[{node}][LOCAL] {msg}"
+    print(full)
+    raise HaoeeNodeError(full)
+
+
+def _haoee_raise_http(node, response, hint=""):
+    try:
+        body = response.text or ""
+    except Exception:
+        body = "<unreadable>"
+    if len(body) > 500:
+        body = body[:500] + "...<truncated>"
+    suffix = f" ({hint})" if hint else ""
+    full = f"[{node}][API_HTTP] HTTP {response.status_code}{suffix} - {body}"
+    print(full)
+    raise HaoeeNodeError(full)
+
+
+def _haoee_raise_api(node, msg):
+    full = f"[{node}][API_ERR] {msg}"
+    print(full)
+    raise HaoeeNodeError(full)
+
+
+def _haoee_raise_network(node, exc):
+    full = f"[{node}][NETWORK] {type(exc).__name__}: {exc}"
+    print(full)
+    raise HaoeeNodeError(full)
+
+
+def _haoee_raise_parse(node, msg, preview=""):
+    full = f"[{node}][PARSE] {msg}"
+    if preview:
+        prev = preview if len(preview) <= 200 else (preview[:200] + "...<truncated>")
+        full += f" preview={prev!r}"
+    print(full)
+    raise HaoeeNodeError(full)
+
+
 class Comfly_HaoeeVideo_Doubao:
+    NODE_NAME = "Doubao"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -1454,13 +1488,10 @@ class Comfly_HaoeeVideo_Doubao:
             self.api_key = apikey
 
         if not self.api_key:
-            error_response = {"code": "error", "message": "API key not found in Comflyapi.json"}
-            raise Exception(json.dumps(error_response, ensure_ascii=False))
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
         if image is None:
-            error_message = "Image not provided"
-            print(error_message)
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, "image not provided")
 
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -1495,27 +1526,24 @@ class Comfly_HaoeeVideo_Doubao:
             )
 
             pbar.update_absolute(20)
-            # print(f"Request sent to {response.url}. Status code: {response.status_code}, Response: {response.text}")
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
 
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                raise Exception(error_message)
+                _haoee_raise_http(self.NODE_NAME, response, hint="create task")
 
             result = response.json()
-            print(f"result: {result}")
 
             task_id = result.get("id")
-            video_url = result.get("content", {}).get("video_url")  # POST 同步返回
+            video_url = result.get("content", {}).get("video_url")
 
-            # 如果同步返回 video_url，直接返回
             if video_url:
                 pbar.update_absolute(100)
-                print(f"Video generated (sync). URL: {video_url}")
+                _haoee_log(self.NODE_NAME, f"sync video_url={video_url}")
                 video_adapter = safe_video_adapter(video_url)
                 return (video_adapter, task_id, json.dumps(result, ensure_ascii=False))
 
-            # 如果 video_url 没有返回，则进入轮询（异步模型）
             pbar.update_absolute(30)
+            _haoee_log(self.NODE_NAME, f"task submitted (async): {task_id}")
             max_attempts = 60
             attempts = 0
 
@@ -1529,13 +1557,12 @@ class Comfly_HaoeeVideo_Doubao:
                         headers=headers,
                         timeout=self.timeout
                     )
-                    print(f"Status check ({attempts}): {status_response.status_code}, Response: {status_response.text}")
+                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
 
                     if status_response.status_code != 200:
-                        error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        raise Exception(error_message)
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
+
                     status_result = status_response.json()
-                    print(f"Response: {status_result}")
                     status = status_result.get("status", "").lower()
                     video_url = status_result.get("content", {}).get("video_url")
 
@@ -1543,19 +1570,17 @@ class Comfly_HaoeeVideo_Doubao:
                     pbar.update_absolute(progress_value)
 
                     if status in ["succeeded", "success"] and video_url:
-                        print(f"Video generated (async). URL: {video_url}")
+                        _haoee_log(self.NODE_NAME, f"async video_url={video_url}")
                         break
                     elif status in ["failed", "failure"]:
                         fail_reason = status_result.get("fail_reason", "Unknown error")
-                        raise Exception(f"Video generation failed: {fail_reason}")
+                        _haoee_raise_api(self.NODE_NAME, f"task failed: {fail_reason}")
 
                 except requests.exceptions.RequestException as e:
-                    print(f"Error checking generation status: {str(e)}")
+                    _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not video_url:
-                error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
-                print(error_message)
-                raise Exception(error_message)
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
 
             pbar.update_absolute(100)
             video_adapter = safe_video_adapter(video_url)
@@ -1571,12 +1596,17 @@ class Comfly_HaoeeVideo_Doubao:
             }
             return (video_adapter, task_id, json.dumps(response_data, ensure_ascii=False))
 
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error generating video: {str(e)}"
-            raise Exception(error_message)
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeVideo_haoeedance:
+    NODE_NAME = "Seedance"
     HAOEEDANCE_CREATE_URL = f"{baseurl}/api/v3/contents/generations/tasks"
     HAOEEDANCE_QUERY_URL = f"{baseurl}/api/v3/contents/generations/tasks/{{id}}"
 
@@ -1633,7 +1663,7 @@ class Comfly_HaoeeVideo_haoeedance:
             pil_img = Image.open(BytesIO(resp.content))
             return pil2tensor(pil_img)
         except Exception as e:
-            print(f"[haoeedance] download last_frame failed: {e}")
+            _haoee_log(self.NODE_NAME, f"download last_frame failed: {e}")
             return self._empty_image()
 
     def generate_video(
@@ -1660,14 +1690,14 @@ class Comfly_HaoeeVideo_haoeedance:
             self.api_key = apikey.strip()
 
         if not self.api_key:
-            error_response = {"code": "error", "message": "API key not provided"}
-            raise Exception(json.dumps(error_response, ensure_ascii=False))
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
         api_model = self.MODEL_MAP.get(model, model)
 
         prompt_preview = (prompt[:80] + "...") if prompt and len(prompt) > 80 else (prompt or "")
-        print(
-            f"[haoeedance] call: model={model}({api_model}), resolution={resolution}, duration={duration}, "
+        _haoee_log(
+            self.NODE_NAME,
+            f"call: model={model}({api_model}), resolution={resolution}, duration={duration}, "
             f"ratio={ratio}, generate_audio={generate_audio}, watermark={watermark}, "
             f"return_last_frame={return_last_frame}, "
             f"first_frame={first_frame is not None}, last_frame={last_frame is not None}, "
@@ -1727,12 +1757,12 @@ class Comfly_HaoeeVideo_haoeedance:
                 })
 
             if not content:
-                raise Exception("content 为空：至少需要 prompt 或一张图片/视频/音频")
+                _haoee_raise_local(self.NODE_NAME, "content empty: need prompt or at least one image/video/audio")
 
             content_summary = [
                 {"type": item["type"], "role": item.get("role", "")} for item in content
             ]
-            print(f"[haoeedance] content items ({len(content)}): {content_summary}")
+            _haoee_log(self.NODE_NAME, f"content items ({len(content)}): {content_summary}")
 
             payload = {
                 "model": api_model,
@@ -1745,7 +1775,7 @@ class Comfly_HaoeeVideo_haoeedance:
                 "return_last_frame": bool(return_last_frame),
             }
 
-            print(f"[haoeedance] POST {self.HAOEEDANCE_CREATE_URL}")
+            _haoee_log(self.NODE_NAME, f"POST {self.HAOEEDANCE_CREATE_URL}")
             response = requests.post(
                 self.HAOEEDANCE_CREATE_URL,
                 headers=headers,
@@ -1753,18 +1783,18 @@ class Comfly_HaoeeVideo_haoeedance:
                 timeout=self.timeout,
             )
             pbar.update_absolute(20)
-            print(f"[haoeedance] create status={response.status_code}, body={response.text}")
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
 
             if response.status_code != 200:
-                raise Exception(f"API Error: {response.status_code} - {response.text}")
+                _haoee_raise_http(self.NODE_NAME, response, hint="create task")
 
             result = response.json()
             task_id = result.get("id")
             if not task_id:
-                raise Exception(f"未获取到 task id, response={result}")
+                _haoee_raise_parse(self.NODE_NAME, "task id missing in create response", preview=str(result))
 
             pbar.update_absolute(30)
-            print(f"[haoeedance] task submitted: {task_id}")
+            _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
 
             max_attempts = 60
             attempts = 0
@@ -1782,10 +1812,10 @@ class Comfly_HaoeeVideo_haoeedance:
                         headers=headers,
                         timeout=self.timeout,
                     )
-                    print(f"[haoeedance] poll {attempts}: status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
 
                     if status_response.status_code != 200:
-                        raise Exception(f"Status check failed: {status_response.status_code} - {status_response.text}")
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
 
                     status_result = status_response.json()
                     task_status = (status_result.get("status") or "").lower()
@@ -1794,49 +1824,56 @@ class Comfly_HaoeeVideo_haoeedance:
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
 
-                    print(f"[haoeedance] task {task_id} status={task_status} (attempt {attempts}/{max_attempts})")
+                    _haoee_log(self.NODE_NAME, f"task {task_id} status={task_status} (attempt {attempts}/{max_attempts})")
 
                     if task_status == "succeeded":
                         video_url = content_resp.get("video_url")
                         last_frame_url = content_resp.get("last_frame_url")
                         if video_url:
-                            print(f"[haoeedance] task {task_id} succeeded, last_frame_url={'yes' if last_frame_url else 'no'}")
+                            _haoee_log(self.NODE_NAME, f"task {task_id} succeeded, last_frame_url={'yes' if last_frame_url else 'no'}")
                             break
-                        raise Exception(f"任务成功但未返回 video_url, response={status_result}")
+                        _haoee_raise_parse(self.NODE_NAME, "success but no video_url in response", preview=str(status_result))
                     elif task_status in ("failed", "expired", "cancelled"):
                         err = status_result.get("error") or {}
                         err_msg = err.get("message") if isinstance(err, dict) else str(err)
-                        print(f"[haoeedance] task {task_id} {task_status}: {err_msg or 'Unknown error'}")
-                        raise Exception(f"Video generation {task_status}: {err_msg or 'Unknown error'}")
+                        _haoee_raise_api(self.NODE_NAME, f"task {task_status}: {err_msg or 'Unknown error'}")
 
                 except requests.exceptions.RequestException as e:
-                    print(f"[haoeedance] poll request error: {e}")
+                    _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not video_url:
-                raise Exception(f"轮询 {max_attempts} 次后仍未获取到 video_url")
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
 
             pbar.update_absolute(90)
 
             if return_last_frame and last_frame_url:
-                print(f"[haoeedance] downloading last_frame: {last_frame_url}")
+                _haoee_log(self.NODE_NAME, f"downloading last_frame: {last_frame_url}")
                 last_frame_tensor = self._download_last_frame(last_frame_url)
             else:
                 last_frame_tensor = self._empty_image()
 
             pbar.update_absolute(100)
-            print(f"[haoeedance] done. task_id={task_id}, video_url={video_url}")
+            _haoee_log(self.NODE_NAME, f"done task_id={task_id}, video_url={video_url}")
 
             video_adapter = safe_video_adapter(video_url)
             return (video_adapter, last_frame_tensor, task_id, json.dumps(status_result, ensure_ascii=False))
 
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error generating video: {str(e)}"
-            print(error_message)
             traceback.print_exc()
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
-class Comfly_HaoeeVideo_grok:
+class Comfly_HaoeeVideo_Grok_Video_3:
+    NODE_NAME = "Grok"
+
+    PENDING_STATES = {"pending", "processing", "in_progress", "queued", "running"}
+    SUCCESS_STATES = {"completed", "succeeded", "success"}
+    FAILED_STATES = {"failed", "error"}
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -1846,13 +1883,18 @@ class Comfly_HaoeeVideo_grok:
                 "model": (["grok-video-3"], {"default": "grok-video-3"}),
                 "aspect_ratio": (["2:3", "3:2", "1:1"], {"default": "2:3"}),
                 "size": (["720P"], {"default": "720P"}),
-                "apikey": ("STRING", {"default": ""})
+                "line_type": (["main"], {"default": "main"}),
+                "apikey": ("STRING", {"default": ""}),
             },
             "optional": {
-                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647})
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+                "image4": ("IMAGE",),
+                "image5": ("IMAGE",),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
             }
         }
-    
+
     RETURN_TYPES = (IO.VIDEO, "STRING", "STRING")
     RETURN_NAMES = ("video", "task_id", "response")
     FUNCTION = "generate_video"
@@ -1860,113 +1902,135 @@ class Comfly_HaoeeVideo_grok:
 
     def __init__(self):
         self.timeout = 300
-    
+
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=True)
-    
-    def generate_video(self, prompt, model="grok-video-3", aspect_ratio="2:3", size="720P", apikey="", image=None, seed=0):
+
+    def _collect_images(self, image, image2, image3, image4, image5):
+        images_list = []
+        for tensor in (image, image2, image3, image4, image5):
+            if tensor is None:
+                continue
+            images_list.append(self.image_to_base64(tensor))
+        return images_list
+
+    def generate_video(self, prompt, model="grok-video-3", aspect_ratio="2:3",
+                       size="720P", line_type="main", apikey="", image=None,
+                       image2=None, image3=None, image4=None, image5=None, seed=0):
         if apikey.strip():
             self.api_key = apikey
-            
+
         if not self.api_key:
-            error_response = {"code": "error", "message": "API key not found in Comflyapi.json"}
-            raise Exception(json.dumps(error_response, ensure_ascii=False))
-    
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
         if image is None:
-            error_message = "Image not provided"
-            print(error_message)
-            raise Exception(error_message)
-            
+            _haoee_raise_local(self.NODE_NAME, "image not provided")
+
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
 
-            headers = {
+            create_headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
-                "modelName": model
+                "ModelName": model,
+                "lineType": line_type,
+            }
+            query_headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "modelName": model,
+                "lineType": line_type,
             }
 
-            image_base64 = self.image_to_base64(image)
+            images_list = self._collect_images(image, image2, image3, image4, image5)
             payload = {
-                "prompt": prompt,
                 "model": model,
+                "prompt": prompt,
                 "aspect_ratio": aspect_ratio,
                 "size": size,
-                "images": [image_base64],
-                "seed": seed if seed > 0 else 0
+                "images": images_list,
+                "seed": seed if seed > 0 else 0,
             }
 
             response = requests.post(
                 f"{baseurl}/v1/video/create",
-                headers=headers,
+                headers=create_headers,
                 json=payload,
                 timeout=self.timeout
             )
 
             pbar.update_absolute(20)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
-            
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                raise Exception(error_message)
-                
+                _haoee_raise_http(self.NODE_NAME, response, hint="create task")
+
             result = response.json()
             task_id = result.get("id")
-                
-            if not task_id:
-                error_message = "No task ID returned from API"
-                print(error_message)
-                raise Exception(error_message)
-            
-            pbar.update_absolute(30)
 
-            max_attempts = 60  
+            if not task_id:
+                _haoee_raise_parse(self.NODE_NAME, "task_id missing in create response", preview=str(result))
+
+            pbar.update_absolute(30)
+            _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
+
+            max_attempts = 60
             attempts = 0
             video_url = None
-            
+            status_result = {}
+
             while attempts < max_attempts:
                 time.sleep(10)
                 attempts += 1
-                
+
                 try:
                     status_response = requests.get(
                         f"{baseurl}/v1/video/query?id={task_id}",
-                        headers=headers,
+                        headers=query_headers,
                         timeout=self.timeout
                     )
-                    print(f"Request sent to {status_response.url}. Response status code: {status_response.status_code}, Response text: {status_response.text}")
-                    
-                    if status_response.status_code != 200:
-                        error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        raise Exception(error_message)
-                        
-                    status_result = status_response.json()
-                    status = status_result.get("status", "")
+                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
 
-                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    if status_response.status_code != 200:
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
+
+                    status_result = status_response.json()
+                    status = str(status_result.get("status", "")).lower()
+
+                    api_progress = status_result.get("progress")
+                    if isinstance(api_progress, (int, float)) and 0 <= api_progress <= 100:
+                        progress_value = int(30 + api_progress * 0.6)
+                    else:
+                        progress_value = min(90, 30 + (attempts * 60 // max_attempts))
                     pbar.update_absolute(progress_value)
 
-                    if status == "completed":
+                    if status in self.SUCCESS_STATES:
                         video_url = status_result.get("video_url")
+                        if not video_url:
+                            _haoee_raise_parse(
+                                self.NODE_NAME,
+                                "success but video_url missing in query response",
+                                preview=str(status_result),
+                            )
                         break
-                    elif status == "failed":
-                        fail_reason = status_result.get("fail_reason", "Unknown error")
-                        error_message = f"Video generation failed: {fail_reason}"
-                        print(error_message)
-                        raise Exception(error_message)
-                        
+                    if status in self.FAILED_STATES:
+                        fail_reason = (
+                            status_result.get("error")
+                            or status_result.get("fail_reason")
+                            or status_result.get("message")
+                            or "Unknown error"
+                        )
+                        _haoee_raise_api(self.NODE_NAME, f"task failed: {fail_reason}")
+
                 except requests.exceptions.RequestException as e:
-                    print(f"Error checking generation status: {str(e)}")
-            
+                    _haoee_log(self.NODE_NAME, f"poll request error: {e}")
+
             if not video_url:
-                error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
-                print(error_message)
-                raise Exception(error_message)
-            
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+
             pbar.update_absolute(100)
-            print(f"Video generation completed. URL: {video_url}")
-            
+            _haoee_log(self.NODE_NAME, f"done video_url={video_url}")
+
             response_data = {
                 "code": "success",
                 "task_id": task_id,
@@ -1974,19 +2038,29 @@ class Comfly_HaoeeVideo_grok:
                 "model": model,
                 "aspect_ratio": aspect_ratio,
                 "size": size,
+                "line_type": line_type,
                 "video_url": video_url,
             }
-            
+            for key in ("thumbnail_url", "enhanced_prompt", "progress",
+                        "status_update_time", "completed_at"):
+                if key in status_result and status_result[key] is not None:
+                    response_data[key] = status_result[key]
+
             video_adapter = ComflyVideoAdapter(video_url)
             return (video_adapter, task_id, json.dumps(response_data, ensure_ascii=False))
-            
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error generating video: {str(e)}"
-            print(error_message)
-            raise Exception(error_message)
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeImage_Gemini:
+    NODE_NAME = "Gemini"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -2027,12 +2101,10 @@ class Comfly_HaoeeImage_Gemini:
                       imageSize="1K", image1=None, image2=None, image3=None, image4=None, image5=None, image6=None, image7=None, image8=None, image9=None, image10=None, apikey="", seed=0):
         if apikey.strip():
             self.api_key = apikey
-            
+
         if not self.api_key:
-            error_message = "API key not found"
-            print(error_message)
-            raise Exception(error_message)
-            
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
@@ -2040,7 +2112,7 @@ class Comfly_HaoeeImage_Gemini:
             # 正则匹配model是否包含（test）
             lineType = "main"
             if re.search(r'\（test\）', model, re.IGNORECASE):
-                print(f"Test model detected: {model}")
+                _haoee_log(self.NODE_NAME, f"test model detected: {model}")
                 lineType = "test"
                 model = re.sub(r'\（test\）', '', model, flags=re.IGNORECASE)
 
@@ -2054,7 +2126,7 @@ class Comfly_HaoeeImage_Gemini:
             all_images = [image1, image2, image3, image4, image5, image6, image7, image8, image9, image10]
             base64_images = [self.image_to_base64(img) for img in all_images if img is not None]
             img_count = len(base64_images)
-            print(f"Processing {img_count} input images")
+            _haoee_log(self.NODE_NAME, f"processing {img_count} input images")
 
             parts = [{ "text": f"{prompt},生成图片" }]
             if img_count > 0:
@@ -2100,7 +2172,7 @@ class Comfly_HaoeeImage_Gemini:
 
             api_model = model  # 已经去掉（test）
             url = f"{baseurl}/v1beta/models/{api_model}:generateContent"
-            print(f"H: {headers}")
+            _haoee_log(self.NODE_NAME, f"POST {url}")
             response = requests.post(
                 url,
                 headers=headers,
@@ -2108,12 +2180,11 @@ class Comfly_HaoeeImage_Gemini:
                 timeout=self.timeout
             )
             pbar.update_absolute(30)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}")
-            
+            _haoee_log(self.NODE_NAME, f"response status={response.status_code}")
+
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                raise Exception(error_message)
-                
+                _haoee_raise_http(self.NODE_NAME, response, hint="generateContent")
+
             result = response.json()
             candidates = result.get("candidates") or []
             content = candidates[0].get("content") if candidates else {}
@@ -2128,40 +2199,40 @@ class Comfly_HaoeeImage_Gemini:
                         generated_image = Image.open(BytesIO(image_data))
                         generated_tensor = pil2tensor(generated_image)
                         generated_tensors.append(generated_tensor)
-                    # 文本处理
                 elif "text" in part:
                     texts_only.append(part["text"])
-                    
+
             response_info = f"Generated {len(generated_tensors)} images using {model}\n"
             if texts_only:
-                response_info += "Text output:\n" + "\n".join(texts_only) + "\n" 
+                response_info += "Text output:\n" + "\n".join(texts_only) + "\n"
             else:
                 response_info += f"imageSize: {imageSize}\n generated_tensors: {len(generated_tensors)}\n"
             pbar.update_absolute(100)
-            print(f'generated_tensors: {len(generated_tensors)}')
+            _haoee_log(self.NODE_NAME, f"generated_tensors={len(generated_tensors)}")
             if generated_tensors:
                 if len(generated_tensors) == 1:
-                    combined_tensor = generated_tensors[0]  # 单张直接返回
+                    combined_tensor = generated_tensors[0]
                 else:
-                    combined_tensor = torch.cat(generated_tensors, dim=0)  # 多张拼接
+                    combined_tensor = torch.cat(generated_tensors, dim=0)
                 return (combined_tensor, response_info, "")
             else:
-                # error_message = "Failed to process any images"
-                # print(error_message)
                 if texts_only:
-                    raise Exception(response_info)
+                    _haoee_raise_api(self.NODE_NAME, f"no image returned. text: {response_info}")
                 else:
-                    raise Exception("Failed to process any images or text")
-                # return (None, error_message, "")
-            
+                    _haoee_raise_parse(self.NODE_NAME, "no image or text in response", preview=str(result))
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error in image generation: {str(e)}"
-            print(error_message)
             traceback.print_exc()
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeImage_Doubao_Seedream:
+    NODE_NAME = "Seedream"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -2234,12 +2305,10 @@ class Comfly_HaoeeImage_Doubao_Seedream:
                   image1=None, image2=None, image3=None, image4=None, seed=0):
         if apikey.strip():
             self.api_key = apikey
-            
+
         if not self.api_key:
-            error_message = "API key not found in Comflyapi.json"
-            print(error_message)
-            raise Exception(error_message)
-            
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
@@ -2248,7 +2317,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
                 final_size = self.size_mapping[resolution][aspect_ratio]
             else:
                 final_size = "1024x1024"
-                print(f"Warning: Combination of {resolution} resolution and {aspect_ratio} aspect ratio not found. Using {final_size}.")
+                _haoee_log(self.NODE_NAME, f"WARN combination {resolution}+{aspect_ratio} not found, using {final_size}")
             
             headers = {
                 "Content-Type": "application/json",
@@ -2282,22 +2351,18 @@ class Comfly_HaoeeImage_Doubao_Seedream:
             )
             
             pbar.update_absolute(30)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
-            
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                raise Exception(error_message)
-                
+                _haoee_raise_http(self.NODE_NAME, response, hint="generations")
+
             result = response.json()
-            
+
             pbar.update_absolute(50)
-            
+
             if "data" not in result or not result["data"]:
-                error_message = "No image data in response"
-                print(error_message)
-                raise Exception(error_message)
-            
-            image_url = None
+                _haoee_raise_parse(self.NODE_NAME, "no image data in response", preview=str(result))
+
             image_data = None
             generated_images = []
             image_urls = []
@@ -2306,38 +2371,36 @@ class Comfly_HaoeeImage_Doubao_Seedream:
                     image_url = item.get("url")
                     if not image_url:
                         continue
-                    
+
                     image_urls.append(image_url)
-                    
+
                     try:
                         img_response = requests.get(image_url, timeout=self.timeout)
                         img_response.raise_for_status()
                         image_data = BytesIO(img_response.content)
-                        
+
                         pil_image = Image.open(image_data)
                         tensor_image = pil2tensor(pil_image)
                         generated_images.append(tensor_image)
                     except Exception as e:
-                        print(f"Error downloading image: {str(e)}")
+                        _haoee_log(self.NODE_NAME, f"download image failed: {e}")
                 else:
                     b64_data = item.get("b64_json")
                     if not b64_data:
                         continue
-                        
+
                     image_data = BytesIO(base64.b64decode(b64_data))
-                    
+
                     pil_image = Image.open(image_data)
                     tensor_image = pil2tensor(pil_image)
                     generated_images.append(tensor_image)
-            
+
             pbar.update_absolute(80)
             if not generated_images:
-                error_message = "Failed to process any images"
-                print(error_message)
-                raise Exception(error_message)
-            
+                _haoee_raise_parse(self.NODE_NAME, "failed to decode any images from response", preview=str(result))
+
             combined_tensor = torch.cat(generated_images, dim=0)
-                
+
             response_info = {
                 "prompt": prompt,
                 "model": model,
@@ -2348,23 +2411,24 @@ class Comfly_HaoeeImage_Doubao_Seedream:
                 "aspect_ratio": aspect_ratio
             }
 
-            if aspect_ratio == "Custom":
-                response_info["original_dimensions"] = f"{width}x{height}"
-                response_info["scaled_dimensions"] = final_size
-            
             response_info["images_generated"] = len(generated_images)
-            
+
             pbar.update_absolute(100)
             first_image_url = image_urls[0] if image_urls else ""
             return (combined_tensor, json.dumps(response_info, indent=2, ensure_ascii=False), first_image_url)
-                
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error generating image: {str(e)}"
-            print(error_message)
-            raise Exception(error_message)
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeImage_gpt_image:
+    NODE_NAME = "GptImage"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -2399,10 +2463,8 @@ class Comfly_HaoeeImage_gpt_image:
             self.api_key = api_key
 
         if not self.api_key:
-            error_message = "API key not found in Comflyapi.json"
-            print(error_message)
-            raise Exception(error_message)
-            
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
@@ -2432,14 +2494,13 @@ class Comfly_HaoeeImage_gpt_image:
                     timeout=self.timeout
                 )
                 pbar.update_absolute(30)
-                print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
+                _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
 
                 if response.status_code != 200:
-                    error_message = f"API Error: {response.status_code} - {response.text}"
-                    raise Exception(error_message)
+                    _haoee_raise_http(self.NODE_NAME, response, hint="generations")
 
                 result = response.json()
-                
+
                 pbar.update_absolute(50)
             
                 timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
@@ -2454,7 +2515,7 @@ class Comfly_HaoeeImage_gpt_image:
 
                 generated_images = []
                 image_urls = []
-                
+
                 if "data" in result and result["data"]:
                     for i, item in enumerate(result["data"]):
                         pbar.update_absolute(50 + (i+1) * 50 // len(result["data"]))
@@ -2476,12 +2537,9 @@ class Comfly_HaoeeImage_gpt_image:
                                     generated_tensor = pil2tensor(generated_image)
                                     generated_images.append(generated_tensor)
                             except Exception as e:
-                                print(f"Error downloading image from URL: {str(e)}")
+                                _haoee_log(self.NODE_NAME, f"download image failed: {e}")
                 else:
-                    error_message = "No generated images in response"
-                    print(error_message)
-                    response_info += f"Error: {error_message}\n"
-                    raise Exception(response_info)
+                    _haoee_raise_parse(self.NODE_NAME, "no generated images in response", preview=str(result))
 
                 if "usage" in result:
                     response_info += "Usage Information:\n"
@@ -2502,14 +2560,11 @@ class Comfly_HaoeeImage_gpt_image:
                 
                 if generated_images:
                     combined_tensor = torch.cat(generated_images, dim=0)
-                    
+
                     pbar.update_absolute(100)
                     return (combined_tensor, response_info)
                 else:
-                    error_message = "No images were successfully processed"
-                    print(error_message)
-                    response_info += f"Error: {error_message}\n"
-                    raise Exception(response_info)
+                    _haoee_raise_parse(self.NODE_NAME, "no images successfully decoded", preview=str(result))
             else:
                 payload = {
                     "model": model,
@@ -2526,30 +2581,21 @@ class Comfly_HaoeeImage_gpt_image:
                     json=payload,
                     timeout=self.timeout
                 )
-                print(f"Request sent to {response.url}. "
-                    f"Response status code: {response.status_code}, "
-                    f"Response text: {response.text}")
+                _haoee_log(self.NODE_NAME, f"chat status={response.status_code}, body={response.text}")
 
                 if response.status_code != 200:
-                    error_message = f"API Error: {response.status_code} - {response.text}"
-                    print(error_message)
-                    raise Exception(error_message)
-                # ---------- 2. 解析返回 ----------
+                    _haoee_raise_http(self.NODE_NAME, response, hint="chat/completions")
                 result = response.json()
                 content = result["choices"][0]["message"]["content"]
                 pbar.update_absolute(40)
-                # ---------- 3. 提取图片 URL（重点修复） ----------
                 image_urls = re.findall(
                     r"!\[.*?\]\((https?://[^)]+)\)",
                     content
                 )
 
                 if not image_urls:
-                    error_message = "No image URLs found in response"
-                    print(error_message)
-                    raise Exception(content)
+                    _haoee_raise_api(self.NODE_NAME, f"no image URLs in chat content: {content}")
 
-                # ---------- 4. 下载并转 IMAGE ----------
                 generated_images = []
 
                 for url in image_urls:
@@ -2562,25 +2608,26 @@ class Comfly_HaoeeImage_gpt_image:
                         generated_images.append(img_tensor)
 
                     except Exception as e:
-                        print(f"[WARN] Failed to download image: {url} | {e}")
+                        _haoee_log(self.NODE_NAME, f"download image failed: {url} | {e}")
 
                 if not generated_images:
-                    error_message = "Images found but failed to download"
-                    print(error_message)
-                    raise Exception(content)
-                # ---------- 5. 合并 batch ----------
+                    _haoee_raise_parse(self.NODE_NAME, f"images found but failed to download. content: {content}")
                 combined_tensor = torch.cat(generated_images, dim=0)
                 pbar.update_absolute(100)
-                # ---------- 6. 正确 RETURN ----------
                 return (combined_tensor, content)
 
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error in image generation: {str(e)}"
-            print(error_message)
-            raise Exception(error_message)
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeImage_Midjourney:
+    NODE_NAME = "MJ"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -2613,12 +2660,10 @@ class Comfly_HaoeeImage_Midjourney:
     def generate_image(self, prompt, botType="MID_JOURNEY", image1=None, image2=None, image3=None, image4=None, state="", apikey="", seed=0):
         if apikey.strip():
             self.api_key = apikey
-            
+
         if not self.api_key:
-            error_message = "API key not found"
-            print(error_message)
-            raise Exception(error_message)
-            
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
@@ -2632,7 +2677,7 @@ class Comfly_HaoeeImage_Midjourney:
             all_images = [image1, image2, image3, image4]
             base64_images = [self.image_to_base64(img) for img in all_images if img is not None]
             img_count = len(base64_images)
-            print(f"Processing {img_count} input images")
+            _haoee_log(self.NODE_NAME, f"processing {img_count} input images")
 
             payload = {
                 "prompt": prompt,
@@ -2648,32 +2693,29 @@ class Comfly_HaoeeImage_Midjourney:
                 json=payload,
                 timeout=self.timeout
             )
-            
+
             pbar.update_absolute(30)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
-            
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                raise Exception(error_message)
-                
+                _haoee_raise_http(self.NODE_NAME, response, hint="submit/imagine")
+
             result = response.json()
             task_id = result.get("result")
-                
+
             if not task_id:
-                error_message = "No task ID returned from API"
-                print(error_message)
-                raise Exception(error_message)
-            
+                _haoee_raise_parse(self.NODE_NAME, "task_id missing in create response", preview=str(result))
+
             pbar.update_absolute(40)
 
-            max_attempts = 10  
+            max_attempts = 10
             attempts = 0
             imageUrl = None
-            
+
             while attempts < max_attempts:
                 time.sleep(10)
                 attempts += 1
-                
+
                 try:
                     query_payload = {
                         "ids": [task_id]
@@ -2685,12 +2727,11 @@ class Comfly_HaoeeImage_Midjourney:
                         json=query_payload,
                         timeout=self.timeout
                     )
-                    print(f"Request sent to {status_response.url}. Response status code: {status_response.status_code}, Response text: {status_response.text}")
-                    
+                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+
                     if status_response.status_code != 200:
-                        error_message = f"Status check failed: {status_response.status_code} - {status_response.text}"
-                        raise Exception(error_message)
-                        
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
+
                     status_result = status_response.json()
                     status_data = status_result[0] if status_result else {}
                     status = status_data.get("status", "")
@@ -2703,29 +2744,25 @@ class Comfly_HaoeeImage_Midjourney:
                         break
                     elif status == "FAILURE":
                         fail_reason = status_data.get("fail_reason", "Unknown error")
-                        error_message = f"Image generation failed: {fail_reason}"
-                        print(error_message)
-                        raise Exception(error_message)
-                    
+                        _haoee_raise_api(self.NODE_NAME, f"task failed: {fail_reason}")
+
                 except requests.exceptions.RequestException as e:
-                    print(f"Error checking generation status: {str(e)}")
-            
+                    _haoee_log(self.NODE_NAME, f"poll request error: {e}")
+
             if not imageUrl:
-                error_message = f"Failed to retrieve video URL after {max_attempts} attempts"
-                print(error_message)
-                raise Exception(error_message)
-              
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get image url after {max_attempts} polls")
+
 
             try:
                 img_response = requests.get(imageUrl, timeout=self.timeout)
                 img_response.raise_for_status()
                 image_data = BytesIO(img_response.content)
-                
+
                 pil_image = Image.open(image_data)
                 tensor_image = pil2tensor(pil_image)
             except Exception as e:
-                raise Exception(f"Error downloading image: {str(e)}")
-                
+                _haoee_raise_parse(self.NODE_NAME, f"error downloading image: {e}")
+
             pbar.update_absolute(100)
 
             response_info = {
@@ -2737,15 +2774,19 @@ class Comfly_HaoeeImage_Midjourney:
             }
 
             return (tensor_image, json.dumps(response_info, ensure_ascii=False), "")
-            
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error in image generation: {str(e)}"
-            print(error_message)
             traceback.print_exc()
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeImage_Nano_banana2:
+    NODE_NAME = "Nano2"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -2786,12 +2827,10 @@ class Comfly_HaoeeImage_Nano_banana2:
                       imageSize="1K", image1=None, image2=None, image3=None, image4=None, image5=None, image6=None, image7=None, image8=None, image9=None, image10=None, apikey="", seed=0):
         if apikey.strip():
             self.api_key = apikey
-            
+
         if not self.api_key:
-            error_message = "API key not found"
-            print(error_message)
-            raise Exception(error_message)
-            
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
@@ -2799,7 +2838,7 @@ class Comfly_HaoeeImage_Nano_banana2:
             # 正则匹配model是否包含（test）
             lineType = "main"
             if re.search(r'\（test\）', model, re.IGNORECASE):
-                print(f"Test model detected: model")
+                _haoee_log(self.NODE_NAME, f"test model detected: {model}")
                 lineType = "test"
                 model = re.sub(r'\（test\）', '', model, flags=re.IGNORECASE)
 
@@ -2813,7 +2852,7 @@ class Comfly_HaoeeImage_Nano_banana2:
             all_images = [image1, image2, image3, image4, image5, image6, image7, image8, image9, image10]
             base64_images = [self.image_to_base64(img) for img in all_images if img is not None]
             img_count = len(base64_images)
-            print(f"Processing {img_count} input images")
+            _haoee_log(self.NODE_NAME, f"processing {img_count} input images")
 
             parts = [{ "text": f"{prompt}" }]
             if img_count > 0:
@@ -2839,17 +2878,16 @@ class Comfly_HaoeeImage_Nano_banana2:
             )
             
             pbar.update_absolute(30)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}")
-            
+            _haoee_log(self.NODE_NAME, f"response status={response.status_code}")
+
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                raise Exception(error_message)
-                
+                _haoee_raise_http(self.NODE_NAME, response, hint="generateContent")
+
             result = response.json()
             candidates = result.get("candidates") or []
             content = candidates[0].get("content") if candidates else {}
             parts = content.get("parts") or []
-            
+
             generated_tensors = []
             for part in parts:
                 if "inlineData" in part:
@@ -2859,29 +2897,29 @@ class Comfly_HaoeeImage_Nano_banana2:
                         generated_image = Image.open(BytesIO(image_data))
                         generated_tensor = pil2tensor(generated_image)
                         generated_tensors.append(generated_tensor)
-             
+
             response_info = f"Generated {len(generated_tensors)} images using {model}\n"
-            response_info += f"imageSize: {imageSize}\n"       
+            response_info += f"imageSize: {imageSize}\n"
             pbar.update_absolute(100)
-            
+
             if generated_tensors:
                 combined_tensor = torch.cat(generated_tensors, dim=0)
                 return (combined_tensor, response_info, "")
             else:
-                error_message = "Failed to process any images"
-                print(error_message)
-                raise Exception(error_message)
-            
+                _haoee_raise_parse(self.NODE_NAME, "no images in response", preview=str(result))
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error in image generation: {str(e)}"
-            print(error_message)
             traceback.print_exc()
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
-def _haoee_parse_images_payload(result, prompt, model, size, response_format, extra_headline="GPT Image 2 Generation"):
-    log_prefix = "[HaoeeParseImages]"
-    print(f"{log_prefix} ==> start: model={model}, size={size}, response_format={response_format}, "
+def _haoee_parse_images_payload(result, prompt, model, size, response_format, extra_headline="GPT Image 2 Generation", node="ParseImages"):
+    log_prefix = f"[{node}]"
+    print(f"{log_prefix} parse_images ==> start: model={model}, size={size}, response_format={response_format}, "
           f"headline={extra_headline!r}, result_keys={list(result.keys()) if isinstance(result, dict) else type(result).__name__}")
 
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
@@ -2898,8 +2936,7 @@ def _haoee_parse_images_payload(result, prompt, model, size, response_format, ex
     data_items = result.get("data") or []
     print(f"{log_prefix} data_items count={len(data_items)}")
     if not data_items:
-        print(f"{log_prefix} ERROR: no data in response, raw={json.dumps(result, ensure_ascii=False)[:500]}")
-        raise Exception(f"No generated images in response: {json.dumps(result, ensure_ascii=False)}")
+        _haoee_raise_parse(node, "no generated images in response", preview=json.dumps(result, ensure_ascii=False))
 
     for idx, item in enumerate(data_items):
         if "b64_json" in item and item["b64_json"]:
@@ -2930,8 +2967,7 @@ def _haoee_parse_images_payload(result, prompt, model, size, response_format, ex
             print(f"{log_prefix} item[{idx}] skipped: no b64_json/url, keys={list(item.keys()) if isinstance(item, dict) else type(item).__name__}")
 
     if not generated_images:
-        print(f"{log_prefix} ERROR: none of the {len(data_items)} items produced an image")
-        raise Exception("Images found but failed to decode/download")
+        _haoee_raise_parse(node, f"images found but failed to decode/download (count={len(data_items)})")
 
     if "usage" in result and result["usage"]:
         usage = result["usage"]
@@ -2956,23 +2992,21 @@ def _haoee_parse_images_payload(result, prompt, model, size, response_format, ex
     return combined_tensor, response_info
 
 
-def _haoee_parse_results_payload(result, prompt, model, size):
-    log_prefix = "[HaoeeParseResults]"
-    print(f"{log_prefix} ==> start: model={model}, size={size}, "
+def _haoee_parse_results_payload(result, prompt, model, size, node="ParseResults"):
+    log_prefix = f"[{node}]"
+    print(f"{log_prefix} parse_results ==> start: model={model}, size={size}, "
           f"result_keys={list(result.keys()) if isinstance(result, dict) else type(result).__name__}")
 
     status = result.get("status")
     print(f"{log_prefix} status={status!r}")
     if status and status != "succeeded":
         reason = result.get("failure_reason") or result.get("error") or ""
-        print(f"{log_prefix} ERROR: task not succeeded, reason={reason!r}")
-        raise Exception(f"Task status={status}. {reason}".strip())
+        _haoee_raise_api(node, f"task status={status}. {reason}".strip())
 
     items = result.get("results") or []
     print(f"{log_prefix} results count={len(items)}")
     if not items:
-        print(f"{log_prefix} ERROR: empty results, raw={json.dumps(result, ensure_ascii=False)[:500]}")
-        raise Exception(f"No results in response: {json.dumps(result, ensure_ascii=False)}")
+        _haoee_raise_parse(node, "no results in response", preview=json.dumps(result, ensure_ascii=False))
 
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     response_info = f"**GPT Image 2 Generation Test ({timestamp})**\n\n"
@@ -3012,8 +3046,7 @@ def _haoee_parse_results_payload(result, prompt, model, size):
             print(f"{log_prefix} item[{idx}] ERROR downloading {url}: {e}")
 
     if not generated_images:
-        print(f"{log_prefix} ERROR: {len(items)} results but no image downloaded")
-        raise Exception("Results returned but failed to download any image")
+        _haoee_raise_parse(node, f"{len(items)} results but no image downloaded")
 
     combined_tensor = torch.cat(generated_images, dim=0)
     print(f"{log_prefix} <== done: generated_images={len(generated_images)}, tensor_shape={tuple(combined_tensor.shape)}")
@@ -3038,31 +3071,31 @@ def _haoee_safe_payload_for_log(payload, max_str_len=200):
         return f"<unprintable payload: {e}>"
 
 
-def _haoee_safe_json_parse(response, log_prefix):
+def _haoee_safe_json_parse(response, log_prefix, node="SafeJsonParse"):
     """
-    Parse response body as JSON, with clear diagnostics when:
-      - body is empty
-      - body is not valid JSON (HTML/plain text etc.)
-    Raises Exception with a readable message; caller should let it bubble up.
+    Parse response body as JSON, with clear diagnostics.
+    On failure raises HaoeeNodeError with [NODE][PARSE] prefix; caller should let it bubble up.
     """
     body = response.text or ""
     content_type = response.headers.get("Content-Type", "")
     if not body.strip():
-        msg = (f"Empty response body (status={response.status_code}, "
+        msg = (f"empty response body (status={response.status_code}, "
                f"content_type={content_type!r}, content_length={response.headers.get('Content-Length')})")
         print(f"{log_prefix} ERROR: {msg}")
-        raise Exception(msg)
+        _haoee_raise_parse(node, msg)
     try:
         return response.json()
     except Exception as e:
         preview = body if len(body) <= 500 else body[:500] + f"...<truncated, total_len={len(body)}>"
-        msg = (f"Invalid JSON response (status={response.status_code}, "
-               f"content_type={content_type!r}, parse_error={e}). body_preview={preview!r}")
-        print(f"{log_prefix} ERROR: {msg}")
-        raise Exception(msg)
+        msg = (f"invalid JSON response (status={response.status_code}, "
+               f"content_type={content_type!r}, parse_error={e})")
+        print(f"{log_prefix} ERROR: {msg}, body_preview={preview!r}")
+        _haoee_raise_parse(node, msg, preview=preview)
 
 
 class Comfly_HaoeeImage_Gpt_Image2_Generations:
+    NODE_NAME = "GptImg2"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -3093,19 +3126,17 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
 
     def generate_image(self, prompt, model, size, api_key, response_format="b64_json",
                        image1=None, image2=None, image3=None, image4=None, seed=0):
-        log_prefix = "[HaoeeGptImg2-Gen]"
+        log_prefix = f"[{self.NODE_NAME}]"
         ref_count = sum(1 for x in [image1, image2, image3, image4] if x is not None)
-        print(f"{log_prefix} ==> start: model={model}, size={size}, response_format={response_format}, "
+        _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size}, response_format={response_format}, "
               f"prompt_len={len(prompt)}, ref_images={ref_count}, seed={seed}")
 
         if api_key.strip():
             self.api_key = api_key
-            print(f"{log_prefix} api_key overridden by input (len={len(api_key.strip())})")
+            _haoee_log(self.NODE_NAME, f"api_key overridden by input (len={len(api_key.strip())})")
 
         if not self.api_key:
-            error_message = "API key not found"
-            print(f"{log_prefix} ERROR: {error_message}")
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -3131,43 +3162,47 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
                     refs.append(_image_tensor_to_base64(img, with_prefix=True))
             if refs:
                 payload["image"] = refs
-            print(f"{log_prefix} payload={_haoee_safe_payload_for_log(payload)}")
+            _haoee_log(self.NODE_NAME, f"payload={_haoee_safe_payload_for_log(payload)}")
 
             pbar.update_absolute(25)
             request_url = f"{baseurl}/v1/images/generations"
-            print(f"{log_prefix} POST {request_url}")
+            _haoee_log(self.NODE_NAME, f"POST {request_url}")
             response = requests.post(
                 request_url,
                 headers=headers,
                 json=payload,
                 timeout=self.timeout,
             )
-            print(f"{log_prefix} response.status_code={response.status_code}, url={response.url}, text_len={len(response.text)}")
+            _haoee_log(self.NODE_NAME, f"response status={response.status_code}, text_len={len(response.text)}")
 
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                print(f"{log_prefix} ERROR: non-200 response, body={response.text}")
-                raise Exception(error_message)
+                _haoee_raise_http(self.NODE_NAME, response, hint="generations")
 
-            result = _haoee_safe_json_parse(response, log_prefix)
+            result = _haoee_safe_json_parse(response, log_prefix, node=self.NODE_NAME)
             pbar.update_absolute(60)
 
             combined_tensor, response_info = _haoee_parse_images_payload(
                 result, prompt, model, size, response_format,
                 extra_headline="GPT Image 2 Generation",
+                node=self.NODE_NAME,
             )
-            print(f"{log_prefix} parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
+            _haoee_log(self.NODE_NAME, f"parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
             pbar.update_absolute(100)
-            print(f"{log_prefix} <== done")
+            _haoee_log(self.NODE_NAME, "<== done")
             return (combined_tensor, response_info)
 
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error in image generation: {str(e)}"
-            print(f"{log_prefix} EXCEPTION: {e}")
-            raise Exception(error_message)
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
+    NODE_NAME = "GptImg2Test"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -3201,19 +3236,17 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
 
     def generate_image(self, prompt, model, size, api_key,
                        image1=None, image2=None, image3=None, image4=None, seed=0):
-        log_prefix = "[HaoeeGptImg2-GenTest]"
+        log_prefix = f"[{self.NODE_NAME}]"
         ref_count = sum(1 for x in [image1, image2, image3, image4] if x is not None)
-        print(f"{log_prefix} ==> start: model={model}, size={size}, "
+        _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size}, "
               f"prompt_len={len(prompt)}, ref_images={ref_count}, seed={seed}")
 
         if api_key.strip():
             self.api_key = api_key
-            print(f"{log_prefix} api_key overridden by input (len={len(api_key.strip())})")
+            _haoee_log(self.NODE_NAME, f"api_key overridden by input (len={len(api_key.strip())})")
 
         if not self.api_key:
-            error_message = "API key not found"
-            print(f"{log_prefix} ERROR: {error_message}")
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -3238,11 +3271,11 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
                     refs.append(_image_tensor_to_base64(img, with_prefix=True))
             if refs:
                 payload["urls"] = refs
-            print(f"{log_prefix} payload={_haoee_safe_payload_for_log(payload)}")
+            _haoee_log(self.NODE_NAME, f"payload={_haoee_safe_payload_for_log(payload)}")
 
             pbar.update_absolute(25)
             request_url = f"{baseurl}/v1/draw/completions"
-            print(f"{log_prefix} POST {request_url} (SSE)")
+            _haoee_log(self.NODE_NAME, f"POST {request_url} (SSE)")
 
             sse_headers = dict(headers)
             sse_headers["Accept"] = "text/event-stream"
@@ -3255,21 +3288,16 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
                 stream=True,
             )
             content_type = response.headers.get("Content-Type", "")
-            print(f"{log_prefix} response.status_code={response.status_code}, url={response.url}, content_type={content_type!r}")
+            _haoee_log(self.NODE_NAME, f"response status={response.status_code}, content_type={content_type!r}")
 
             if response.status_code != 200:
-                try:
-                    body_text = response.text
-                except Exception:
-                    body_text = "<unreadable>"
-                print(f"{log_prefix} ERROR: non-200 response, body={body_text}")
-                raise Exception(f"API Error: {response.status_code} - {body_text}")
+                _haoee_raise_http(self.NODE_NAME, response, hint="draw/completions")
 
             is_sse = ("text/event-stream" in content_type) or (not content_type)
             result = None
 
             if is_sse:
-                print(f"{log_prefix} parsing SSE stream")
+                _haoee_log(self.NODE_NAME, "parsing SSE stream")
                 last_progress = -1
                 last_status = None
                 event_count = 0
@@ -3281,7 +3309,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
                     if not line:
                         continue
                     if not line.startswith("data:"):
-                        print(f"{log_prefix} sse non-data line: {line[:120]}")
+                        _haoee_log(self.NODE_NAME, f"sse non-data line: {line[:120]}")
                         continue
                     data_str = line[len("data:"):].strip()
                     if not data_str or data_str == "[DONE]":
@@ -3289,7 +3317,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
                     try:
                         evt = json.loads(data_str)
                     except Exception as e:
-                        print(f"{log_prefix} sse invalid JSON: {data_str[:200]!r}, err={e}")
+                        _haoee_log(self.NODE_NAME, f"sse invalid JSON: {data_str[:200]!r}, err={e}")
                         continue
 
                     event_count += 1
@@ -3305,9 +3333,9 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
                     elif isinstance(progress, int) and isinstance(last_progress, int) and progress - last_progress >= 10:
                         log_this = True
                     if log_this:
-                        print(f"{log_prefix} sse event#{event_count}: status={status!r}, progress={progress}")
+                        _haoee_log(self.NODE_NAME, f"sse event#{event_count}: status={status!r}, progress={progress}")
                         if status_changed:
-                            print(f"{log_prefix} sse event#{event_count} full={json.dumps(evt, ensure_ascii=False)}")
+                            _haoee_log(self.NODE_NAME, f"sse event#{event_count} full={json.dumps(evt, ensure_ascii=False)}")
                         last_status = status
                         if isinstance(progress, int):
                             last_progress = progress
@@ -3316,40 +3344,44 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
 
                     if failure_reason or err or status == "failed":
                         msg = failure_reason or err or "task failed"
-                        print(f"{log_prefix} ERROR: sse reported failure: {msg}")
-                        print(f"{log_prefix} ERROR: failure event full={json.dumps(evt, ensure_ascii=False)}")
-                        raise Exception(f"Task failed: {msg}")
+                        _haoee_log(self.NODE_NAME, f"sse failure event full={json.dumps(evt, ensure_ascii=False)}")
+                        _haoee_raise_api(self.NODE_NAME, f"task failed: {msg}")
 
                     if status == "succeeded":
                         result = evt
-                        print(f"{log_prefix} sse succeeded at event#{event_count}")
-                        print(f"{log_prefix} sse succeeded event full={json.dumps(evt, ensure_ascii=False)}")
+                        _haoee_log(self.NODE_NAME, f"sse succeeded at event#{event_count}")
+                        _haoee_log(self.NODE_NAME, f"sse succeeded event full={json.dumps(evt, ensure_ascii=False)}")
                         break
 
-                print(f"{log_prefix} sse stream finished, total_events={event_count}")
+                _haoee_log(self.NODE_NAME, f"sse stream finished, total_events={event_count}")
                 if result is None:
-                    raise Exception(f"SSE stream ended without a succeeded event (events={event_count})")
+                    _haoee_raise_parse(self.NODE_NAME, f"SSE stream ended without a succeeded event (events={event_count})")
             else:
-                print(f"{log_prefix} content_type is not SSE, fallback to JSON parsing")
-                result = _haoee_safe_json_parse(response, log_prefix)
+                _haoee_log(self.NODE_NAME, "content_type is not SSE, fallback to JSON parsing")
+                result = _haoee_safe_json_parse(response, log_prefix, node=self.NODE_NAME)
 
             pbar.update_absolute(95)
 
             combined_tensor, response_info = _haoee_parse_results_payload(
-                result, prompt, model, size,
+                result, prompt, model, size, node=self.NODE_NAME,
             )
-            print(f"{log_prefix} parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
+            _haoee_log(self.NODE_NAME, f"parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
             pbar.update_absolute(100)
-            print(f"{log_prefix} <== done")
+            _haoee_log(self.NODE_NAME, "<== done")
             return (combined_tensor, response_info)
 
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error in image generation (test): {str(e)}"
-            print(f"{log_prefix} EXCEPTION: {e}")
-            raise Exception(error_message)
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeImage_Gpt_Image2_Vip:
+    NODE_NAME = "GptImg2Vip"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -3390,20 +3422,17 @@ class Comfly_HaoeeImage_Gpt_Image2_Vip:
 
     def generate_image(self, prompt, model, size, api_key,
                        image1=None, image2=None, image3=None, image4=None, seed=0):
-        log_prefix = "[HaoeeGptImg2-Vip]"
         ref_count = sum(1 for x in [image1, image2, image3, image4] if x is not None)
         api_size = size.split("（", 1)[0].strip() if size else size
-        print(f"{log_prefix} ==> start: model={model}, size={size} (api={api_size}), "
+        _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size} (api={api_size}), "
               f"prompt_len={len(prompt)}, ref_images={ref_count}, seed={seed}")
 
         if api_key.strip():
             self.api_key = api_key
-            print(f"{log_prefix} api_key overridden by input (len={len(api_key.strip())})")
+            _haoee_log(self.NODE_NAME, f"api_key overridden by input (len={len(api_key.strip())})")
 
         if not self.api_key:
-            error_message = "API key not found"
-            print(f"{log_prefix} ERROR: {error_message}")
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -3429,11 +3458,11 @@ class Comfly_HaoeeImage_Gpt_Image2_Vip:
                     refs.append(_image_tensor_to_base64(img, with_prefix=True))
             if refs:
                 payload["urls"] = refs
-            print(f"{log_prefix} payload={_haoee_safe_payload_for_log(payload)}")
+            _haoee_log(self.NODE_NAME, f"payload={_haoee_safe_payload_for_log(payload)}")
 
             pbar.update_absolute(25)
             request_url = f"{baseurl}/v1/draw/completions"
-            print(f"{log_prefix} POST {request_url}")
+            _haoee_log(self.NODE_NAME, f"POST {request_url}")
 
             response = requests.post(
                 request_url,
@@ -3442,22 +3471,17 @@ class Comfly_HaoeeImage_Gpt_Image2_Vip:
                 timeout=self.timeout,
             )
             content_type = response.headers.get("Content-Type", "")
-            print(f"{log_prefix} response.status_code={response.status_code}, url={response.url}, content_type={content_type!r}")
+            _haoee_log(self.NODE_NAME, f"response status={response.status_code}, content_type={content_type!r}")
 
             if response.status_code != 200:
-                try:
-                    body_text = response.text
-                except Exception:
-                    body_text = "<unreadable>"
-                print(f"{log_prefix} ERROR: non-200 response, body={body_text}")
-                raise Exception(f"API Error: {response.status_code} - {body_text}")
+                _haoee_raise_http(self.NODE_NAME, response, hint="draw/completions")
 
             try:
                 result = response.json()
-                print(f"{log_prefix} parsed as plain JSON")
+                _haoee_log(self.NODE_NAME, "parsed as plain JSON")
             except Exception as je:
                 raw_text = response.text or ""
-                print(f"{log_prefix} plain JSON parse failed ({je}); falling back to SSE-style data: prefix parsing")
+                _haoee_log(self.NODE_NAME, f"plain JSON parse failed ({je}); falling back to SSE-style data: prefix parsing")
                 result = None
                 last_evt = None
                 for raw_line in raw_text.splitlines():
@@ -3478,39 +3502,42 @@ class Comfly_HaoeeImage_Gpt_Image2_Vip:
                 if result is None:
                     result = last_evt
                 if result is None:
-                    preview = raw_text[:500]
-                    raise Exception(f"Failed to parse response body, preview={preview!r}")
-                print(f"{log_prefix} parsed via SSE-style fallback")
+                    _haoee_raise_parse(self.NODE_NAME, "failed to parse response body", preview=raw_text)
+                _haoee_log(self.NODE_NAME, "parsed via SSE-style fallback")
 
             status = (result.get("status") if isinstance(result, dict) else "") or ""
             failure_reason = ((result.get("failure_reason") if isinstance(result, dict) else "") or "").strip()
             err = ((result.get("error") if isinstance(result, dict) else "") or "").strip()
-            print(f"{log_prefix} result status={status!r}, progress={result.get('progress') if isinstance(result, dict) else 'n/a'}")
+            _haoee_log(self.NODE_NAME, f"result status={status!r}, progress={result.get('progress') if isinstance(result, dict) else 'n/a'}")
 
             if failure_reason or err or status == "failed":
                 msg = failure_reason or err or "task failed"
-                print(f"{log_prefix} ERROR: task failed: {msg}, full={json.dumps(result, ensure_ascii=False)}")
-                raise Exception(f"Task failed: {msg}")
+                _haoee_raise_api(self.NODE_NAME, f"task failed: {msg}")
             if status and status != "succeeded":
-                print(f"{log_prefix} WARN: unexpected status={status!r}, full={json.dumps(result, ensure_ascii=False)}")
+                _haoee_log(self.NODE_NAME, f"WARN unexpected status={status!r}, full={json.dumps(result, ensure_ascii=False)}")
 
             pbar.update_absolute(85)
 
             combined_tensor, response_info = _haoee_parse_results_payload(
-                result, prompt, model, size,
+                result, prompt, model, size, node=self.NODE_NAME,
             )
-            print(f"{log_prefix} parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
+            _haoee_log(self.NODE_NAME, f"parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
             pbar.update_absolute(100)
-            print(f"{log_prefix} <== done")
+            _haoee_log(self.NODE_NAME, "<== done")
             return (combined_tensor, response_info)
 
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error in image generation (vip): {str(e)}"
-            print(f"{log_prefix} EXCEPTION: {e}")
-            raise Exception(error_message)
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeImage_Gpt_Image2_Edit:
+    NODE_NAME = "GptImg2Edit"
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -3538,22 +3565,19 @@ class Comfly_HaoeeImage_Gpt_Image2_Edit:
 
     def edit_image(self, image, prompt, model, api_key,
                    size="1024x1024", response_format="b64_json", seed=0):
-        log_prefix = "[HaoeeGptImg2-Edit]"
-        print(f"{log_prefix} ==> start: model={model}, size={size}, response_format={response_format}, "
+        log_prefix = f"[{self.NODE_NAME}]"
+        _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size}, response_format={response_format}, "
               f"prompt_len={len(prompt)}, seed={seed}")
 
         if api_key.strip():
             self.api_key = api_key
-            print(f"{log_prefix} api_key overridden by input (len={len(api_key.strip())})")
+            _haoee_log(self.NODE_NAME, f"api_key overridden by input (len={len(api_key.strip())})")
 
         if not self.api_key:
-            error_message = "API key not found"
-            print(f"{log_prefix} ERROR: {error_message}")
-            raise Exception(error_message)
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
         if image is None:
-            print(f"{log_prefix} ERROR: image not provided")
-            raise Exception("Image not provided")
+            _haoee_raise_local(self.NODE_NAME, "image not provided")
 
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -3565,7 +3589,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Edit:
             buf.seek(0)
             image_bytes = buf.getvalue()
             buf.seek(0)
-            print(f"{log_prefix} image prepared: size={pil_image.size}, png_bytes={len(image_bytes)}")
+            _haoee_log(self.NODE_NAME, f"image prepared: size={pil_image.size}, png_bytes={len(image_bytes)}")
 
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -3581,11 +3605,11 @@ class Comfly_HaoeeImage_Gpt_Image2_Edit:
             }
 
             files = {"image": ("image.png", buf, "image/png")}
-            print(f"{log_prefix} form_data={_haoee_safe_payload_for_log(data)}, files=[image.png]")
+            _haoee_log(self.NODE_NAME, f"form_data={_haoee_safe_payload_for_log(data)}, files=[image.png]")
 
             pbar.update_absolute(25)
             request_url = f"{baseurl}/v1/images/edits"
-            print(f"{log_prefix} POST {request_url}")
+            _haoee_log(self.NODE_NAME, f"POST {request_url}")
             response = requests.post(
                 request_url,
                 headers=headers,
@@ -3593,32 +3617,36 @@ class Comfly_HaoeeImage_Gpt_Image2_Edit:
                 files=files,
                 timeout=self.timeout,
             )
-            print(f"{log_prefix} response.status_code={response.status_code}, url={response.url}, text_len={len(response.text)}")
+            _haoee_log(self.NODE_NAME, f"response status={response.status_code}, text_len={len(response.text)}")
 
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                print(f"{log_prefix} ERROR: non-200 response, body={response.text}")
-                raise Exception(error_message)
+                _haoee_raise_http(self.NODE_NAME, response, hint="images/edits")
 
-            result = _haoee_safe_json_parse(response, log_prefix)
+            result = _haoee_safe_json_parse(response, log_prefix, node=self.NODE_NAME)
             pbar.update_absolute(60)
 
             combined_tensor, response_info = _haoee_parse_images_payload(
                 result, prompt, model, size, response_format,
                 extra_headline="GPT Image 2 Edit",
+                node=self.NODE_NAME,
             )
-            print(f"{log_prefix} parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
+            _haoee_log(self.NODE_NAME, f"parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
             pbar.update_absolute(100)
-            print(f"{log_prefix} <== done")
+            _haoee_log(self.NODE_NAME, "<== done")
             return (combined_tensor, response_info)
 
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error in image edit: {str(e)}"
-            print(f"{log_prefix} EXCEPTION: {e}")
-            raise Exception(error_message)
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeText:
+    NODE_NAME = "Text"
+
     def __init__(self):
         self.timeout = 300
 
@@ -3669,12 +3697,10 @@ class Comfly_HaoeeText:
                          image4=None, image5=None, image6=None, image7=None, image8=None, image9=None, image10=None, ):
         if apikey.strip():
             self.api_key = apikey
-            
-        if not self.api_key:
-            error_message = "API key not found"
-            print(error_message)
-            return (error_message, "")
-        
+
+        if not getattr(self, "api_key", None):
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
@@ -3688,7 +3714,7 @@ class Comfly_HaoeeText:
             all_images = [image1, image2, image3, image4, image5, image6, image7, image8, image9, image10]
             base64_images = [self.image_to_base64(img) for img in all_images if img is not None]
             img_count = len(base64_images)
-            print(f"Processing {img_count} input images")
+            _haoee_log(self.NODE_NAME, f"processing {img_count} input images")
 
 
             content = [{'type': 'text', 'text': f"{prompt}"}]
@@ -3707,7 +3733,7 @@ class Comfly_HaoeeText:
                 "temperature": temperature,
                 "seed": seed if seed > 0 else 0
             }
-            
+
             response = requests.post(
                 f"{baseurl}/v1/chat/completions", 
                 headers=headers, 
@@ -3716,31 +3742,24 @@ class Comfly_HaoeeText:
             )
 
             pbar.update_absolute(30)
-            print(f"Request sent to {response.url}. Response status code: {response.status_code}, Response text: {response.text}")
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
 
             if response.status_code != 200:
-                error_message = f"API Error: {response.status_code} - {response.text}"
-                return (error_message, "")
-        
+                _haoee_raise_http(self.NODE_NAME, response, hint="chat/completions")
+
             result = response.json()
             pbar.update_absolute(40)
 
-            if "error" in result:
-                error_message = result["error"]
-                print(error_message)
-                return (error_message, "")
+            if "error" in result and result["error"]:
+                _haoee_raise_api(self.NODE_NAME, f"chat error: {result['error']}")
 
             if "choices" not in result or not result["choices"]:
-                error_message = "No choices in response"
-                print(error_message)
-                return (error_message, "")
-            
+                _haoee_raise_parse(self.NODE_NAME, "no choices in response", preview=str(result))
+
             prompt_result = result["choices"][0]["message"]["content"]
 
             if not prompt_result or not str(prompt_result).strip():
-                error_message = "Empty response"
-                print(error_message)
-                return (error_message, "")
+                _haoee_raise_api(self.NODE_NAME, "empty response content")
 
             response_info = {
                 "prompt": prompt,
@@ -3751,13 +3770,17 @@ class Comfly_HaoeeText:
 
             return (json.dumps(response_info, ensure_ascii=False), prompt_result)
 
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            error_message = f"Error completions: {str(e)}"
-            print(error_message)
-            return (error_message, "")
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeTextGPT:
+    NODE_NAME = "TextGPT"
 
     def __init__(self):
         self.timeout = 300
@@ -3798,7 +3821,7 @@ class Comfly_HaoeeTextGPT:
             self.api_key = apikey
 
         if not self.api_key:
-            return ("API key not found", "")
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
         try:
 
@@ -3825,17 +3848,15 @@ class Comfly_HaoeeTextGPT:
             )
 
             pbar.update_absolute(30)
-
-            print(f"Request sent to {response.url}")
-            print(response.text)
+            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
 
             if response.status_code != 200:
-                return (f"API Error: {response.status_code} - {response.text}", "")
+                _haoee_raise_http(self.NODE_NAME, response, hint="responses")
 
             result = response.json()
 
             if result.get("error"):
-                return (str(result["error"]), "")
+                _haoee_raise_api(self.NODE_NAME, f"chat error: {result['error']}")
 
             prompt_result = ""
 
@@ -3845,7 +3866,7 @@ class Comfly_HaoeeTextGPT:
                         prompt_result += c.get("text", "")
 
             if not prompt_result.strip():
-                return ("Empty response", "")
+                _haoee_raise_api(self.NODE_NAME, "empty response content")
 
             response_info = json.dumps({
                 "model": model,
@@ -3856,8 +3877,13 @@ class Comfly_HaoeeTextGPT:
 
             return (response_info, prompt_result)
 
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            return (f"Error completions: {str(e)}", "")
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeTextGPT5_4:
@@ -3871,6 +3897,7 @@ class Comfly_HaoeeTextGPT5_4:
                       响应 Responses API 格式 output[].content[].output_text
     解析时按字段优先级分派：choices > output，兼容两种格式。
     """
+    NODE_NAME = "TextGPT5.4"
 
     def __init__(self):
         self.timeout = 600
@@ -3905,16 +3932,14 @@ class Comfly_HaoeeTextGPT5_4:
 
     def completions(self, apikey, model, prompt, max_completion_tokens):
 
-        log_prefix = "[HaoeeGPT5.4]"
-        print(f"{log_prefix} ==> start: model={model}, prompt_len={len(prompt)}, max_completion_tokens={max_completion_tokens}")
+        _haoee_log(self.NODE_NAME, f"==> start: model={model}, prompt_len={len(prompt)}, max_completion_tokens={max_completion_tokens}")
 
         if apikey.strip():
             self.api_key = apikey
-            print(f"{log_prefix} apikey overridden by input (len={len(apikey.strip())})")
+            _haoee_log(self.NODE_NAME, f"apikey overridden by input (len={len(apikey.strip())})")
 
         if not self.api_key:
-            print(f"{log_prefix} ERROR: API key not found")
-            return ("API key not found", "")
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
         try:
 
@@ -3937,7 +3962,7 @@ class Comfly_HaoeeTextGPT5_4:
                         }
                     ]
                 }
-                print(f"{log_prefix} payload schema=responses-input (gpt-5.4-pro)")
+                _haoee_log(self.NODE_NAME, "payload schema=responses-input (gpt-5.4-pro)")
             else:
                 payload = {
                     "model": model,
@@ -3954,11 +3979,11 @@ class Comfly_HaoeeTextGPT5_4:
                     ],
                     "max_completion_tokens": max_completion_tokens
                 }
-                print(f"{log_prefix} payload schema=chat-completions-messages (gpt-5.4)")
+                _haoee_log(self.NODE_NAME, "payload schema=chat-completions-messages (gpt-5.4)")
 
             request_url = f"{baseurl}/v1/chat/completions"
-            print(f"{log_prefix} POST {request_url}")
-            print(f"{log_prefix} payload={json.dumps(payload, ensure_ascii=False)}")
+            _haoee_log(self.NODE_NAME, f"POST {request_url}")
+            _haoee_log(self.NODE_NAME, f"payload={json.dumps(payload, ensure_ascii=False)}")
 
             response = requests.post(
                 request_url,
@@ -3969,18 +3994,15 @@ class Comfly_HaoeeTextGPT5_4:
 
             pbar.update_absolute(30)
 
-            print(f"{log_prefix} response.status_code={response.status_code}, url={response.url}, text_len={len(response.text)}")
-            print(f"{log_prefix} response.text={response.text}")
+            _haoee_log(self.NODE_NAME, f"response status={response.status_code}, text_len={len(response.text)}, body={response.text}")
 
             if response.status_code != 200:
-                print(f"{log_prefix} ERROR: non-200 response")
-                return (f"API Error: {response.status_code} - {response.text}", "")
+                _haoee_raise_http(self.NODE_NAME, response, hint="chat/completions")
 
             result = response.json()
 
             if result.get("error"):
-                print(f"{log_prefix} ERROR: result.error={result.get('error')}")
-                return (str(result["error"]), "")
+                _haoee_raise_api(self.NODE_NAME, f"chat error: {result['error']}")
 
             prompt_result = ""
             parse_format = None
@@ -4013,14 +4035,13 @@ class Comfly_HaoeeTextGPT5_4:
                             if isinstance(text, str):
                                 prompt_result += text
 
-            print(f"{log_prefix} parsed format={parse_format}, text_len={len(prompt_result)}")
+            _haoee_log(self.NODE_NAME, f"parsed format={parse_format}, text_len={len(prompt_result)}")
 
             if not prompt_result.strip():
-                print(f"{log_prefix} ERROR: empty text, raw_keys={list(result.keys())}")
-                return ("Empty response", "")
+                _haoee_raise_parse(self.NODE_NAME, "empty text in response", preview=str(result))
 
             usage = result.get("usage", {}) or {}
-            print(f"{log_prefix} usage={json.dumps(usage, ensure_ascii=False)}")
+            _haoee_log(self.NODE_NAME, f"usage={json.dumps(usage, ensure_ascii=False)}")
 
             response_info = json.dumps({
                 "model": model,
@@ -4028,13 +4049,17 @@ class Comfly_HaoeeTextGPT5_4:
             }, ensure_ascii=False, indent=2)
 
             pbar.update_absolute(100)
-            print(f"{log_prefix} <== done: model={model}")
+            _haoee_log(self.NODE_NAME, f"<== done: model={model}")
 
             return (response_info, prompt_result)
 
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
         except Exception as e:
-            print(f"{log_prefix} EXCEPTION: {e}")
-            return (f"Error completions: {str(e)}", "")
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 NODE_CLASS_MAPPINGS = {
@@ -4051,6 +4076,7 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_HaoeeImage_Gemini": Comfly_HaoeeImage_Gemini,
     "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
     "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
+    "Comfly_HaoeeVideo_Grok_Video_3": Comfly_HaoeeVideo_Grok_Video_3,
     # "Comfly_HaoeeImage_Gpt_Image2_Generations": Comfly_HaoeeImage_Gpt_Image2_Generations,
     "Comfly_HaoeeImage_Gpt_Image2_Generations_Test": Comfly_HaoeeImage_Gpt_Image2_Generations_Test,
     "Comfly_HaoeeImage_Gpt_Image2_Vip": Comfly_HaoeeImage_Gpt_Image2_Vip,
@@ -4077,6 +4103,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeVideo_haoeedance": "好易 视频 Seedance",
     "Comfly_HaoeeImage_Gemini": "好易 绘图 Gemini",
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
+    "Comfly_HaoeeVideo_Grok_Video_3": "好易 视频 Grok Video 3",
     # "Comfly_HaoeeImage_Gpt_Image2_Generations": "好易 绘图 GPT Image2 图片生成",
     "Comfly_HaoeeImage_Gpt_Image2_Generations_Test": "好易 绘图 GPT Image2 图片生成(测试渠道)",
     "Comfly_HaoeeImage_Gpt_Image2_Vip": "好易 绘图 GPT Image2 VIP",
