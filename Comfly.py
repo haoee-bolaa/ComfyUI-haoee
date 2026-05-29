@@ -204,7 +204,7 @@ class Comfly_HaoeeVideo_MiniMax:
             )
             
             pbar.update_absolute(20)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="create task")
@@ -234,7 +234,7 @@ class Comfly_HaoeeVideo_MiniMax:
                         headers=headers,
                         timeout=self.timeout
                     )
-                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     if status_response.status_code != 200:
                         _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
@@ -388,7 +388,7 @@ class Comfly_HaoeeVideo_Sora2_Pro:
                 timeout=self.timeout
             )
             pbar.update_absolute(20)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="create task")
@@ -416,7 +416,7 @@ class Comfly_HaoeeVideo_Sora2_Pro:
                         headers=headers,
                         timeout=self.timeout
                     )
-                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     if status_response.status_code != 200:
                         _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
@@ -600,7 +600,7 @@ class Comfly_HaoeeVideo_Sora2:
                 timeout=self.timeout,
             )
             pbar.update_absolute(20)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="create task")
@@ -632,7 +632,7 @@ class Comfly_HaoeeVideo_Sora2:
                         headers=headers,
                         timeout=self.timeout,
                     )
-                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     if status_response.status_code != 200:
                         _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
@@ -815,7 +815,7 @@ class Comfly_HaoeeVideo_Kling:
                 )
                 
             pbar.update_absolute(20)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="create task")
@@ -853,7 +853,7 @@ class Comfly_HaoeeVideo_Kling:
                             headers=headers,
                             timeout=self.timeout
                         )
-                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     if status_response.status_code != 200:
                         _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
@@ -980,7 +980,7 @@ class Comfly_HaoeeVideo_vidu:
             )
 
             pbar.update_absolute(20)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="create task")
@@ -1008,7 +1008,7 @@ class Comfly_HaoeeVideo_vidu:
                         headers=headers,
                         timeout=self.timeout
                     )
-                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     if status_response.status_code != 200:
                         _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
@@ -1130,7 +1130,7 @@ class Comfly_HaoeeVideo_Veo3:
             )
 
             pbar.update_absolute(20)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="create task")
@@ -1158,7 +1158,7 @@ class Comfly_HaoeeVideo_Veo3:
                         headers=headers,
                         timeout=self.timeout
                     )
-                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     if status_response.status_code != 200:
                         _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
@@ -1293,7 +1293,7 @@ class Comfly_HaoeeVideo_Wan:
             )
 
             pbar.update_absolute(20)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="create task")
@@ -1324,7 +1324,7 @@ class Comfly_HaoeeVideo_Wan:
                         headers=headers,
                         timeout=self.timeout
                     )
-                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     if status_response.status_code != 200:
                         _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
@@ -1402,8 +1402,140 @@ class HaoeeNodeError(Exception):
     """
 
 
+_HAOEE_MEDIA_FIELD_KEYS = frozenset({
+    "b64_json", "data", "image", "images", "inlinedata", "inline_data", "filedata",
+    "bytesbase64encoded", "first_frame_image", "base64array",
+})
+
+
+def _haoee_is_media_field_key(key):
+    if not isinstance(key, str):
+        return False
+    kl = key.lower()
+    if kl in _HAOEE_MEDIA_FIELD_KEYS:
+        return True
+    return "b64" in kl or (kl.endswith("image") and kl != "image_size")
+
+
+def _haoee_shrink_for_log(value, max_str_len=200, field_key=None):
+    if isinstance(value, str):
+        if field_key and _haoee_is_media_field_key(field_key):
+            return value if len(value) <= max_str_len else f"<base64 len={len(value)}>"
+        return value if len(value) <= max_str_len else f"<str len={len(value)}>"
+    if isinstance(value, list):
+        if len(value) <= 10:
+            return [_haoee_shrink_for_log(x, max_str_len) for x in value]
+        return f"<list len={len(value)}>"
+    if isinstance(value, dict):
+        return {k: _haoee_shrink_for_log(v, max_str_len, k) for k, v in value.items()}
+    return value
+
+
+_HAOEE_B64_PAYLOAD_PREFIXES = ("iVBOR", "/9j/", "UklGR", "R0lGOD")
+_HAOEE_MIN_KNOWN_FIELD_B64_LEN = 200
+_HAOEE_MIN_FALLBACK_B64_LEN = 500
+
+
+def _haoee_extract_b64_payload(s):
+    text = s.strip()
+    if ";base64," in text and text.lower().startswith("data:"):
+        return text.split(";base64,", 1)[1].strip()
+    return text
+
+
+def _haoee_base64_char_ratio(payload):
+    if not payload:
+        return 0.0
+    valid = sum(
+        1 for c in payload
+        if c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r"
+    )
+    return valid / len(payload)
+
+
+def _haoee_try_b64decode(payload):
+    try:
+        p = payload.strip()
+        if not p:
+            return False
+        base64.b64decode(p, validate=True)
+        return True
+    except Exception:
+        return False
+
+
+def _haoee_is_base64_string(s, field_key=None):
+    if not isinstance(s, str) or not s:
+        return False
+    payload = _haoee_extract_b64_payload(s)
+
+    if ";base64," in s and s.lower().startswith("data:"):
+        if _haoee_try_b64decode(payload):
+            return True
+
+    for prefix in _HAOEE_B64_PAYLOAD_PREFIXES:
+        if payload.startswith(prefix) and _haoee_try_b64decode(payload):
+            return True
+
+    if field_key and _haoee_is_media_field_key(field_key):
+        if len(s) >= _HAOEE_MIN_KNOWN_FIELD_B64_LEN and _haoee_base64_char_ratio(payload) >= 0.95:
+            if _haoee_try_b64decode(payload):
+                return True
+
+    if len(s) >= _HAOEE_MIN_FALLBACK_B64_LEN and _haoee_base64_char_ratio(payload) >= 0.95:
+        if _haoee_try_b64decode(payload):
+            return True
+
+    return False
+
+
+def _haoee_replace_base64_in_json(obj, field_key=None):
+    has_b64 = False
+
+    def walk(val, key=None):
+        nonlocal has_b64
+        if isinstance(val, str):
+            if _haoee_is_base64_string(val, key):
+                has_b64 = True
+                return f"<base64 len={len(val)}>"
+            return val
+        if isinstance(val, list):
+            return [walk(item, key) for item in val]
+        if isinstance(val, dict):
+            return {k: walk(v, k) for k, v in val.items()}
+        return val
+
+    return walk(obj, field_key), has_b64
+
+
+def _haoee_prepare_response_log(text):
+    if not text:
+        return ""
+    if os.environ.get("HAOEE_LOG_FULL_BODY") == "1":
+        if len(text) <= 50000:
+            return text
+        return text[:50000] + f"...<truncated, total_len={len(text)}>"
+    try:
+        obj = json.loads(text)
+    except Exception:
+        return text
+    new_obj, has_b64 = _haoee_replace_base64_in_json(obj)
+    if not has_b64:
+        return text
+    return json.dumps(new_obj, ensure_ascii=False)
+
+
 def _haoee_log(node, msg):
     print(f"[{node}] {msg}")
+
+
+def _haoee_log_http_response(node, response, label="response", extra=""):
+    body_text = response.text or ""
+    safe_body = _haoee_prepare_response_log(body_text)
+    msg = f"{label} status={response.status_code}, body={safe_body}"
+    if extra:
+        msg = f"{label} status={response.status_code}, {extra}, body={safe_body}"
+    _haoee_log(node, msg)
 
 
 def _haoee_raise_local(node, msg):
@@ -1526,7 +1658,7 @@ class Comfly_HaoeeVideo_Doubao:
             )
 
             pbar.update_absolute(20)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="create task")
@@ -1557,7 +1689,7 @@ class Comfly_HaoeeVideo_Doubao:
                         headers=headers,
                         timeout=self.timeout
                     )
-                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     if status_response.status_code != 200:
                         _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
@@ -1783,7 +1915,7 @@ class Comfly_HaoeeVideo_haoeedance:
                 timeout=self.timeout,
             )
             pbar.update_absolute(20)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="create task")
@@ -1812,7 +1944,7 @@ class Comfly_HaoeeVideo_haoeedance:
                         headers=headers,
                         timeout=self.timeout,
                     )
-                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     if status_response.status_code != 200:
                         _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
@@ -1823,8 +1955,6 @@ class Comfly_HaoeeVideo_haoeedance:
 
                     progress_value = min(80, 40 + (attempts * 40 // max_attempts))
                     pbar.update_absolute(progress_value)
-
-                    _haoee_log(self.NODE_NAME, f"task {task_id} status={task_status} (attempt {attempts}/{max_attempts})")
 
                     if task_status == "succeeded":
                         video_url = content_resp.get("video_url")
@@ -1960,7 +2090,7 @@ class Comfly_HaoeeVideo_Grok_Video_3:
             )
 
             pbar.update_absolute(20)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="create task")
@@ -1989,7 +2119,7 @@ class Comfly_HaoeeVideo_Grok_Video_3:
                         headers=query_headers,
                         timeout=self.timeout
                     )
-                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     if status_response.status_code != 200:
                         _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
@@ -2180,7 +2310,7 @@ class Comfly_HaoeeImage_Gemini:
                 timeout=self.timeout
             )
             pbar.update_absolute(30)
-            _haoee_log(self.NODE_NAME, f"response status={response.status_code}")
+            _haoee_log_http_response(self.NODE_NAME, response)
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="generateContent")
@@ -2351,7 +2481,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
             )
             
             pbar.update_absolute(30)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="generations")
@@ -2494,7 +2624,7 @@ class Comfly_HaoeeImage_gpt_image:
                     timeout=self.timeout
                 )
                 pbar.update_absolute(30)
-                _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+                _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
                 if response.status_code != 200:
                     _haoee_raise_http(self.NODE_NAME, response, hint="generations")
@@ -2581,7 +2711,7 @@ class Comfly_HaoeeImage_gpt_image:
                     json=payload,
                     timeout=self.timeout
                 )
-                _haoee_log(self.NODE_NAME, f"chat status={response.status_code}, body={response.text}")
+                _haoee_log_http_response(self.NODE_NAME, response, label="chat")
 
                 if response.status_code != 200:
                     _haoee_raise_http(self.NODE_NAME, response, hint="chat/completions")
@@ -2695,7 +2825,7 @@ class Comfly_HaoeeImage_Midjourney:
             )
 
             pbar.update_absolute(30)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="submit/imagine")
@@ -2727,7 +2857,7 @@ class Comfly_HaoeeImage_Midjourney:
                         json=query_payload,
                         timeout=self.timeout
                     )
-                    _haoee_log(self.NODE_NAME, f"poll #{attempts} status={status_response.status_code}, body={status_response.text}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     if status_response.status_code != 200:
                         _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
@@ -2878,7 +3008,7 @@ class Comfly_HaoeeImage_Nano_banana2:
             )
             
             pbar.update_absolute(30)
-            _haoee_log(self.NODE_NAME, f"response status={response.status_code}")
+            _haoee_log_http_response(self.NODE_NAME, response)
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="generateContent")
@@ -3055,18 +3185,8 @@ def _haoee_parse_results_payload(result, prompt, model, size, node="ParseResults
 
 def _haoee_safe_payload_for_log(payload, max_str_len=200):
     """Render a payload as JSON but shrink huge strings/lists (e.g. base64 images) for logging."""
-    def shrink(v):
-        if isinstance(v, str):
-            return v if len(v) <= max_str_len else f"<str len={len(v)}>"
-        if isinstance(v, list):
-            if len(v) <= 10:
-                return [shrink(x) for x in v]
-            return f"<list len={len(v)}>"
-        if isinstance(v, dict):
-            return {k: shrink(vv) for k, vv in v.items()}
-        return v
     try:
-        return json.dumps(shrink(payload), ensure_ascii=False)
+        return json.dumps(_haoee_shrink_for_log(payload, max_str_len), ensure_ascii=False)
     except Exception as e:
         return f"<unprintable payload: {e}>"
 
@@ -3173,7 +3293,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
                 json=payload,
                 timeout=self.timeout,
             )
-            _haoee_log(self.NODE_NAME, f"response status={response.status_code}, text_len={len(response.text)}")
+            _haoee_log_http_response(self.NODE_NAME, response)
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="generations")
@@ -3288,10 +3408,11 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
                 stream=True,
             )
             content_type = response.headers.get("Content-Type", "")
-            _haoee_log(self.NODE_NAME, f"response status={response.status_code}, content_type={content_type!r}")
-
             if response.status_code != 200:
+                _haoee_log(self.NODE_NAME, f"response status={response.status_code}, content_type={content_type!r}, body={response.text}")
                 _haoee_raise_http(self.NODE_NAME, response, hint="draw/completions")
+            else:
+                _haoee_log(self.NODE_NAME, f"response status={response.status_code}, content_type={content_type!r}")
 
             is_sse = ("text/event-stream" in content_type) or (not content_type)
             result = None
@@ -3471,7 +3592,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Vip:
                 timeout=self.timeout,
             )
             content_type = response.headers.get("Content-Type", "")
-            _haoee_log(self.NODE_NAME, f"response status={response.status_code}, content_type={content_type!r}")
+            _haoee_log_http_response(self.NODE_NAME, response, extra=f"content_type={content_type!r}")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="draw/completions")
@@ -3617,7 +3738,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Edit:
                 files=files,
                 timeout=self.timeout,
             )
-            _haoee_log(self.NODE_NAME, f"response status={response.status_code}, text_len={len(response.text)}")
+            _haoee_log_http_response(self.NODE_NAME, response)
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="images/edits")
@@ -3742,7 +3863,7 @@ class Comfly_HaoeeText:
             )
 
             pbar.update_absolute(30)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="chat/completions")
@@ -3848,7 +3969,7 @@ class Comfly_HaoeeTextGPT:
             )
 
             pbar.update_absolute(30)
-            _haoee_log(self.NODE_NAME, f"create status={response.status_code}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="responses")
@@ -3994,7 +4115,7 @@ class Comfly_HaoeeTextGPT5_4:
 
             pbar.update_absolute(30)
 
-            _haoee_log(self.NODE_NAME, f"response status={response.status_code}, text_len={len(response.text)}, body={response.text}")
+            _haoee_log_http_response(self.NODE_NAME, response)
 
             if response.status_code != 200:
                 _haoee_raise_http(self.NODE_NAME, response, hint="chat/completions")
