@@ -18,6 +18,8 @@ from .utils import pil2tensor, tensor2pil
 from comfy.comfy_types import IO
 
 baseurl = "https://maas.haoee.com"
+HAOEE_HTTP_TIMEOUT_SEC = 600  # 10 分钟：单次 HTTP 请求超时
+HAOEE_POLL_TOTAL_TIMEOUT_SEC = 600  # 10 分钟：任务轮询总时长上限
 
 
 def _image_tensor_to_base64(image_tensor, with_prefix=True):
@@ -71,7 +73,7 @@ class ComflyVideoAdapter:
 
             result = subprocess.run(
                 [ffmpeg_path, "-y", "-i", input_path, "-c", "copy", "-movflags", "+faststart", output_path],
-                capture_output=True, text=True, timeout=120
+                capture_output=True, text=True, timeout=HAOEE_HTTP_TIMEOUT_SEC
             )
             if result.returncode != 0:
                 print(f"[ComflyVideoAdapter] ffmpeg remux failed: {result.stderr}")
@@ -87,7 +89,7 @@ class ComflyVideoAdapter:
     def save_to(self, output_path, format="auto", codec="auto", metadata=None):
         if self.is_url:
             try:
-                response = requests.get(self.video_url, stream=True)
+                response = requests.get(self.video_url, stream=True, timeout=HAOEE_HTTP_TIMEOUT_SEC)
                 response.raise_for_status()
 
                 temp_path = output_path + ".tmp"
@@ -160,7 +162,7 @@ class Comfly_HaoeeVideo_MiniMax:
     CATEGORY = "好易/Video"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
     
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=True)
@@ -218,13 +220,14 @@ class Comfly_HaoeeVideo_MiniMax:
             pbar.update_absolute(30)
             _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
 
-            max_attempts = 60  
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
             attempts = 0
             file_id = None
             video_url = None
             status_result = {}
             
-            while attempts < max_attempts:
+            while time.monotonic() < poll_deadline:
                 time.sleep(10)  
                 attempts += 1
                 
@@ -242,7 +245,7 @@ class Comfly_HaoeeVideo_MiniMax:
                     status_result = status_response.json()
                     state = status_result["data"]["state"]
                     
-                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
                     
                     if state == "success":
@@ -328,7 +331,7 @@ class Comfly_HaoeeVideo_Sora2_Pro:
     CATEGORY = "好易/Video"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
     
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=True)
@@ -402,11 +405,12 @@ class Comfly_HaoeeVideo_Sora2_Pro:
             pbar.update_absolute(30)
             _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
 
-            max_attempts = 80
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
             attempts = 0
             video_url = None
 
-            while attempts < max_attempts:
+            while time.monotonic() < poll_deadline:
                 time.sleep(5)
                 attempts += 1
 
@@ -424,7 +428,7 @@ class Comfly_HaoeeVideo_Sora2_Pro:
                     status_data = status_response.json()
                     status = status_data.get("status")
 
-                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
 
                     # status: queued, in_progress, completed, failed
@@ -471,7 +475,7 @@ class Comfly_HaoeeVideo_Sora2_Pro:
                     _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not video_url:
-                _haoee_raise_parse(self.NODE_NAME, f"failed to get video URL after {max_attempts} attempts")
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video URL after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
 
             video_adapter = ComflyVideoAdapter(video_url)
 
@@ -527,7 +531,7 @@ class Comfly_HaoeeVideo_Sora2:
     CATEGORY = "好易/Video"
 
     def __init__(self):
-        self.timeout = 30
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = None
 
     def _img_b64(self, image_tensor):
@@ -617,12 +621,13 @@ class Comfly_HaoeeVideo_Sora2:
             pbar.update_absolute(30)
             _haoee_log(self.NODE_NAME, f"task submitted: {task_id}, init state={data.get('task_state')}")
 
-            max_attempts = 60
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
             attempts = 0
             video_url = None
             status_result = {}
 
-            while attempts < max_attempts:
+            while time.monotonic() < poll_deadline:
                 time.sleep(10)
                 attempts += 1
 
@@ -641,10 +646,10 @@ class Comfly_HaoeeVideo_Sora2:
                     status_data = status_result.get("data") or {}
                     state = (status_data.get("state") or "").lower()
 
-                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
 
-                    _haoee_log(self.NODE_NAME, f"task {task_id} state={state} (attempt {attempts}/{max_attempts})")
+                    _haoee_log(self.NODE_NAME, f"task {task_id} state={state} (attempt {attempts})")
 
                     if state == "success":
                         file_info = status_data.get("file_info") or []
@@ -669,7 +674,7 @@ class Comfly_HaoeeVideo_Sora2:
                     _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not video_url:
-                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
 
             pbar.update_absolute(100)
             _haoee_log(self.NODE_NAME, f"done task_id={task_id}, video_url={video_url}")
@@ -716,7 +721,7 @@ class Comfly_HaoeeVideo_Kling:
     CATEGORY = "好易/Video"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
 
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=False)
@@ -832,11 +837,12 @@ class Comfly_HaoeeVideo_Kling:
             pbar.update_absolute(30)
             _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
 
-            max_attempts = 60
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
             attempts = 0
             video_url = None
 
-            while attempts < max_attempts:
+            while time.monotonic() < poll_deadline:
                 time.sleep(10)
                 attempts += 1
 
@@ -861,7 +867,7 @@ class Comfly_HaoeeVideo_Kling:
                     status_data = status_response.json()
                     status = status_data["data"]["task_status"]
 
-                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
 
                     if status == "succeed":
@@ -876,7 +882,7 @@ class Comfly_HaoeeVideo_Kling:
                     _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not video_url:
-                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
 
             video_adapter = ComflyVideoAdapter(video_url)
 
@@ -931,7 +937,7 @@ class Comfly_HaoeeVideo_vidu:
     CATEGORY = "好易/Video"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
     
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=True)
@@ -994,11 +1000,12 @@ class Comfly_HaoeeVideo_vidu:
             pbar.update_absolute(30)
             _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
 
-            max_attempts = 60
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
             attempts = 0
             video_url = None
 
-            while attempts < max_attempts:
+            while time.monotonic() < poll_deadline:
                 time.sleep(10)
                 attempts += 1
 
@@ -1016,7 +1023,7 @@ class Comfly_HaoeeVideo_vidu:
                     status_result = status_response.json()
                     state = status_result.get("state", "")
 
-                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
 
                     if state == "success":
@@ -1034,7 +1041,7 @@ class Comfly_HaoeeVideo_vidu:
                     _haoee_log(self.NODE_NAME, f"poll request error (attempt {attempts}): {e}")
 
             if not video_url:
-                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
 
             pbar.update_absolute(100)
             _haoee_log(self.NODE_NAME, f"done video_url={video_url}")
@@ -1087,7 +1094,7 @@ class Comfly_HaoeeVideo_Veo3:
     CATEGORY = "好易/Video"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
     
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=True)
@@ -1144,11 +1151,12 @@ class Comfly_HaoeeVideo_Veo3:
             pbar.update_absolute(30)
             _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
 
-            max_attempts = 60
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
             attempts = 0
             video_url = None
 
-            while attempts < max_attempts:
+            while time.monotonic() < poll_deadline:
                 time.sleep(10)
                 attempts += 1
 
@@ -1166,7 +1174,7 @@ class Comfly_HaoeeVideo_Veo3:
                     status_result = status_response.json()
                     status = status_result.get("status", "")
 
-                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
 
                     if status == "SUCCESS":
@@ -1181,7 +1189,7 @@ class Comfly_HaoeeVideo_Veo3:
                     _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not video_url:
-                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
 
             pbar.update_absolute(100)
             _haoee_log(self.NODE_NAME, f"done video_url={video_url}")
@@ -1238,7 +1246,7 @@ class Comfly_HaoeeVideo_Wan:
     CATEGORY = "好易/Video"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
     
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=True)
@@ -1310,11 +1318,12 @@ class Comfly_HaoeeVideo_Wan:
             pbar.update_absolute(30)
             _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
 
-            max_attempts = 60
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
             attempts = 0
             video_url = None
 
-            while attempts < max_attempts:
+            while time.monotonic() < poll_deadline:
                 time.sleep(10)
                 attempts += 1
 
@@ -1332,7 +1341,7 @@ class Comfly_HaoeeVideo_Wan:
                     status_result = status_response.json()
                     status = status_result.get("output", {}).get("task_status")
 
-                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
 
                     if status == "SUCCEEDED":
@@ -1346,7 +1355,7 @@ class Comfly_HaoeeVideo_Wan:
                     _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not video_url:
-                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
 
             pbar.update_absolute(100)
             _haoee_log(self.NODE_NAME, f"done video_url={video_url}")
@@ -1609,7 +1618,7 @@ class Comfly_HaoeeVideo_Doubao:
     CATEGORY = "好易/Video"
 
     def __init__(self):
-        self.timeout = 30  # GET 轮询超时，避免300秒阻塞
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = None
 
     def image_to_base64(self, image_tensor):
@@ -1676,10 +1685,11 @@ class Comfly_HaoeeVideo_Doubao:
 
             pbar.update_absolute(30)
             _haoee_log(self.NODE_NAME, f"task submitted (async): {task_id}")
-            max_attempts = 60
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
             attempts = 0
 
-            while attempts < max_attempts:
+            while time.monotonic() < poll_deadline:
                 time.sleep(10)
                 attempts += 1
 
@@ -1698,7 +1708,7 @@ class Comfly_HaoeeVideo_Doubao:
                     status = status_result.get("status", "").lower()
                     video_url = status_result.get("content", {}).get("video_url")
 
-                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
 
                     if status in ["succeeded", "success"] and video_url:
@@ -1712,7 +1722,7 @@ class Comfly_HaoeeVideo_Doubao:
                     _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not video_url:
-                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
 
             pbar.update_absolute(100)
             video_adapter = safe_video_adapter(video_url)
@@ -1779,7 +1789,7 @@ class Comfly_HaoeeVideo_haoeedance:
     CATEGORY = "好易/Video"
 
     def __init__(self):
-        self.timeout = 30
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = None
 
     def _img_b64(self, image_tensor):
@@ -1790,7 +1800,7 @@ class Comfly_HaoeeVideo_haoeedance:
 
     def _download_last_frame(self, url):
         try:
-            resp = requests.get(url, timeout=60)
+            resp = requests.get(url, timeout=HAOEE_HTTP_TIMEOUT_SEC)
             resp.raise_for_status()
             pil_img = Image.open(BytesIO(resp.content))
             return pil2tensor(pil_img)
@@ -1928,13 +1938,14 @@ class Comfly_HaoeeVideo_haoeedance:
             pbar.update_absolute(30)
             _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
 
-            max_attempts = 60
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
             attempts = 0
             video_url = None
             last_frame_url = None
             status_result = {}
 
-            while attempts < max_attempts:
+            while time.monotonic() < poll_deadline:
                 time.sleep(10)
                 attempts += 1
 
@@ -1953,7 +1964,7 @@ class Comfly_HaoeeVideo_haoeedance:
                     task_status = (status_result.get("status") or "").lower()
                     content_resp = status_result.get("content") or {}
 
-                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
 
                     if task_status == "succeeded":
@@ -1972,7 +1983,7 @@ class Comfly_HaoeeVideo_haoeedance:
                     _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not video_url:
-                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
 
             pbar.update_absolute(90)
 
@@ -2031,7 +2042,7 @@ class Comfly_HaoeeVideo_Grok_Video_3:
     CATEGORY = "好易/Video"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
 
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=True)
@@ -2104,12 +2115,13 @@ class Comfly_HaoeeVideo_Grok_Video_3:
             pbar.update_absolute(30)
             _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
 
-            max_attempts = 60
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
             attempts = 0
             video_url = None
             status_result = {}
 
-            while attempts < max_attempts:
+            while time.monotonic() < poll_deadline:
                 time.sleep(10)
                 attempts += 1
 
@@ -2131,7 +2143,7 @@ class Comfly_HaoeeVideo_Grok_Video_3:
                     if isinstance(api_progress, (int, float)) and 0 <= api_progress <= 100:
                         progress_value = int(30 + api_progress * 0.6)
                     else:
-                        progress_value = min(90, 30 + (attempts * 60 // max_attempts))
+                        progress_value = min(90, 30 + int((time.monotonic() - poll_started) * 60 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
 
                     if status in self.SUCCESS_STATES:
@@ -2156,7 +2168,7 @@ class Comfly_HaoeeVideo_Grok_Video_3:
                     _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not video_url:
-                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {max_attempts} polls")
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
 
             pbar.update_absolute(100)
             _haoee_log(self.NODE_NAME, f"done video_url={video_url}")
@@ -2222,7 +2234,7 @@ class Comfly_HaoeeImage_Gemini:
     CATEGORY = "好易/Image"
 
     def __init__(self):
-        self.timeout = 600
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
     
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=False)
@@ -2389,7 +2401,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
     CATEGORY = "好易/Image"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.size_mapping = {
             "1K": {
                 "1:1":  "1024x1024",
@@ -2584,7 +2596,7 @@ class Comfly_HaoeeImage_gpt_image:
     CATEGORY = "好易/Image"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
 
     def generate_image(self, prompt, model="gpt-image-1.5", n=1, quality="auto", 
                 size="auto", background="auto", output_format="png", 
@@ -2661,7 +2673,7 @@ class Comfly_HaoeeImage_gpt_image:
                         elif "url" in item:
                             image_urls.append(item["url"])
                             try:
-                                img_response = requests.get(item["url"])
+                                img_response = requests.get(item["url"], timeout=HAOEE_HTTP_TIMEOUT_SEC)
                                 if img_response.status_code == 200:
                                     generated_image = Image.open(BytesIO(img_response.content))
                                     generated_tensor = pil2tensor(generated_image)
@@ -2730,7 +2742,7 @@ class Comfly_HaoeeImage_gpt_image:
 
                 for url in image_urls:
                     try:
-                        img_resp = requests.get(url, timeout=60)
+                        img_resp = requests.get(url, timeout=HAOEE_HTTP_TIMEOUT_SEC)
                         img_resp.raise_for_status()
 
                         img = Image.open(BytesIO(img_resp.content)).convert("RGB")
@@ -2782,7 +2794,7 @@ class Comfly_HaoeeImage_Midjourney:
     CATEGORY = "好易/Image"
 
     def __init__(self):
-        self.timeout = 600
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
     
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=True)
@@ -2838,11 +2850,12 @@ class Comfly_HaoeeImage_Midjourney:
 
             pbar.update_absolute(40)
 
-            max_attempts = 10
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
             attempts = 0
             imageUrl = None
 
-            while attempts < max_attempts:
+            while time.monotonic() < poll_deadline:
                 time.sleep(10)
                 attempts += 1
 
@@ -2866,7 +2879,7 @@ class Comfly_HaoeeImage_Midjourney:
                     status_data = status_result[0] if status_result else {}
                     status = status_data.get("status", "")
 
-                    progress_value = min(80, 40 + (attempts * 40 // max_attempts))
+                    progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
 
                     if status == "SUCCESS":
@@ -2880,7 +2893,7 @@ class Comfly_HaoeeImage_Midjourney:
                     _haoee_log(self.NODE_NAME, f"poll request error: {e}")
 
             if not imageUrl:
-                _haoee_raise_parse(self.NODE_NAME, f"failed to get image url after {max_attempts} polls")
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get image url after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
 
 
             try:
@@ -2948,7 +2961,7 @@ class Comfly_HaoeeImage_Nano_banana2:
     CATEGORY = "好易/Image"
 
     def __init__(self):
-        self.timeout = 600
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
     
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=False)
@@ -3085,7 +3098,7 @@ def _haoee_parse_images_payload(result, prompt, model, size, response_format, ex
             url = item["url"]
             print(f"{log_prefix} item[{idx}] download url={url}")
             try:
-                img_resp = requests.get(url, timeout=60)
+                img_resp = requests.get(url, timeout=HAOEE_HTTP_TIMEOUT_SEC)
                 img_resp.raise_for_status()
                 generated_image = Image.open(BytesIO(img_resp.content)).convert("RGB")
                 print(f"{log_prefix} item[{idx}] downloaded image size={generated_image.size}, bytes={len(img_resp.content)}")
@@ -3166,7 +3179,7 @@ def _haoee_parse_results_payload(result, prompt, model, size, node="ParseResults
             continue
         print(f"{log_prefix} item[{idx}] download url={url}")
         try:
-            img_resp = requests.get(url, timeout=60)
+            img_resp = requests.get(url, timeout=HAOEE_HTTP_TIMEOUT_SEC)
             img_resp.raise_for_status()
             generated_image = Image.open(BytesIO(img_resp.content)).convert("RGB")
             print(f"{log_prefix} item[{idx}] downloaded image size={generated_image.size}, bytes={len(img_resp.content)}")
@@ -3241,7 +3254,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
     CATEGORY = "好易/Image"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = None
 
     def generate_image(self, prompt, model, size, api_key, response_format="b64_json",
@@ -3351,7 +3364,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
     CATEGORY = "好易/Image"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = None
 
     def generate_image(self, prompt, model, size, api_key,
@@ -3538,7 +3551,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Vip:
     CATEGORY = "好易/Image"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = None
 
     def generate_image(self, prompt, model, size, api_key,
@@ -3681,7 +3694,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Edit:
     CATEGORY = "好易/Image"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = None
 
     def edit_image(self, image, prompt, model, api_key,
@@ -3769,7 +3782,7 @@ class Comfly_HaoeeText:
     NODE_NAME = "Text"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -3904,7 +3917,7 @@ class Comfly_HaoeeTextGPT:
     NODE_NAME = "TextGPT"
 
     def __init__(self):
-        self.timeout = 300
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = ""
 
     @classmethod
@@ -4021,7 +4034,7 @@ class Comfly_HaoeeTextGPT5_4:
     NODE_NAME = "TextGPT5.4"
 
     def __init__(self):
-        self.timeout = 600
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = ""
 
     @classmethod
