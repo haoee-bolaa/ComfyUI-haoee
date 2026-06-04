@@ -2021,7 +2021,6 @@ class Comfly_HaoeeVideo_Grok_Video_3:
                 "model": (["grok-video-3"], {"default": "grok-video-3"}),
                 "aspect_ratio": (["2:3", "3:2", "1:1"], {"default": "2:3"}),
                 "size": (["720P"], {"default": "720P"}),
-                "line_type": (["main"], {"default": "main"}),
                 "apikey": ("STRING", {"default": ""}),
             },
             "optional": {
@@ -2053,7 +2052,7 @@ class Comfly_HaoeeVideo_Grok_Video_3:
         return images_list
 
     def generate_video(self, prompt, model="grok-video-3", aspect_ratio="2:3",
-                       size="720P", line_type="main", apikey="", image=None,
+                       size="720P", apikey="", image=None,
                        image2=None, image3=None, image4=None, image5=None, seed=0):
         if apikey.strip():
             self.api_key = apikey
@@ -2072,12 +2071,10 @@ class Comfly_HaoeeVideo_Grok_Video_3:
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
                 "ModelName": model,
-                "lineType": line_type,
             }
             query_headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "modelName": model,
-                "lineType": line_type,
             }
 
             images_list = self._collect_images(image, image2, image3, image4, image5)
@@ -2176,7 +2173,6 @@ class Comfly_HaoeeVideo_Grok_Video_3:
                 "model": model,
                 "aspect_ratio": aspect_ratio,
                 "size": size,
-                "line_type": line_type,
                 "video_url": video_url,
             }
             for key in ("thumbnail_url", "enhanced_prompt", "progress",
@@ -2204,7 +2200,7 @@ class Comfly_HaoeeImage_Gemini:
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["gemini-3-pro-image-preview", "gemini-3-pro-image-preview（test）", "gemini-3.1-flash-image-preview", "gemini-3.1-flash-image-preview（test）"], {"default": "gemini-3-pro-image-preview"}),
+                "model": (["gemini-3-pro-image-preview", "gemini-3.1-flash-image-preview"], {"default": "gemini-3-pro-image-preview"}),
                 "aspectRatio": (["auto", "1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"], {"default": "auto"}),
                 "imageSize": (["1K", "2K", "4K"], {"default": "1K"}),
                 "apikey": ("STRING", {"default": ""}),
@@ -2247,18 +2243,10 @@ class Comfly_HaoeeImage_Gemini:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
 
-            # 正则匹配model是否包含（test）
-            lineType = "main"
-            if re.search(r'\（test\）', model, re.IGNORECASE):
-                _haoee_log(self.NODE_NAME, f"test model detected: {model}")
-                lineType = "test"
-                model = re.sub(r'\（test\）', '', model, flags=re.IGNORECASE)
-
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
                 "modelName": model,
-                "lineType": lineType
             }
 
             all_images = [image1, image2, image3, image4, image5, image6, image7, image8, image9, image10]
@@ -2308,7 +2296,7 @@ class Comfly_HaoeeImage_Gemini:
             if seed > 0:
                 payload["seed"] = seed
 
-            api_model = model  # 已经去掉（test）
+            api_model = model
             url = f"{baseurl}/v1beta/models/{api_model}:generateContent"
             _haoee_log(self.NODE_NAME, f"POST {url}")
             _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
@@ -2931,7 +2919,7 @@ class Comfly_HaoeeImage_Nano_banana2:
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["gemini-3.1-flash-image-preview", "gemini-3.1-flash-image-preview（test）"], {"default": "gemini-3.1-flash-image-preview"}),
+                "model": (["gemini-3.1-flash-image-preview"], {"default": "gemini-3.1-flash-image-preview"}),
                 "aspectRatio": (["auto", "1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"], {"default": "auto"}),
                 "imageSize": (["1K", "2K", "4K"], {"default": "1K"}),
                 "apikey": ("STRING", {"default": ""}),
@@ -2974,18 +2962,10 @@ class Comfly_HaoeeImage_Nano_banana2:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
 
-            # 正则匹配model是否包含（test）
-            lineType = "main"
-            if re.search(r'\（test\）', model, re.IGNORECASE):
-                _haoee_log(self.NODE_NAME, f"test model detected: {model}")
-                lineType = "test"
-                model = re.sub(r'\（test\）', '', model, flags=re.IGNORECASE)
-
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
                 "modelName": model,
-                "lineType": lineType
             }
 
             all_images = [image1, image2, image3, image4, image5, image6, image7, image8, image9, image10]
@@ -3266,8 +3246,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
-                "modelName": model,
-                "lineType": "main",
+                "ModelName": model,
             }
 
             payload = {
@@ -3305,185 +3284,6 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
                 result, prompt, model, size, response_format,
                 extra_headline="GPT Image 2 Generation",
                 node=self.NODE_NAME,
-            )
-            _haoee_log(self.NODE_NAME, f"parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
-            pbar.update_absolute(100)
-            _haoee_log(self.NODE_NAME, "<== done")
-            return (combined_tensor, response_info)
-
-        except HaoeeNodeError:
-            raise
-        except requests.exceptions.RequestException as e:
-            _haoee_raise_network(self.NODE_NAME, e)
-        except Exception as e:
-            traceback.print_exc()
-            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
-
-
-class Comfly_HaoeeImage_Gpt_Image2_Generations_Test:
-    NODE_NAME = "GptImg2Test"
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "prompt": ("STRING", {"multiline": True}),
-                "model": (["gpt-image-2"], {"default": "gpt-image-2"}),
-                "size": ([
-                    "auto",
-                    "1:1", "3:2", "2:3", "16:9", "9:16", "4:3", "3:4",
-                    "21:9", "9:21", "1:3", "3:1", "2:1", "1:2",
-                ], {"default": "auto"}),
-                "api_key": ("STRING", {"default": ""}),
-            },
-            "optional": {
-                "image1": ("IMAGE",),
-                "image2": ("IMAGE",),
-                "image3": ("IMAGE",),
-                "image4": ("IMAGE",),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
-            }
-        }
-
-    RETURN_TYPES = ("IMAGE", "STRING")
-    RETURN_NAMES = ("generated_image", "response")
-    FUNCTION = "generate_image"
-    CATEGORY = "好易/Image"
-
-    def __init__(self):
-        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
-        self.api_key = None
-
-    def generate_image(self, prompt, model, size, api_key,
-                       image1=None, image2=None, image3=None, image4=None, seed=0):
-        log_prefix = f"[{self.NODE_NAME}]"
-        ref_count = sum(1 for x in [image1, image2, image3, image4] if x is not None)
-        _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size}, "
-              f"prompt_len={len(prompt)}, ref_images={ref_count}, seed={seed}")
-
-        if api_key.strip():
-            self.api_key = api_key
-            _haoee_log(self.NODE_NAME, f"api_key overridden by input (len={len(api_key.strip())})")
-
-        if not self.api_key:
-            _haoee_raise_local(self.NODE_NAME, "API key not provided")
-
-        try:
-            pbar = comfy.utils.ProgressBar(100)
-            pbar.update_absolute(10)
-
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-                "modelName": model,
-                "lineType": "test",
-            }
-
-            payload = {
-                "model": model,
-                "prompt": prompt,
-                "size": size,
-            }
-
-            refs = []
-            for img in [image1, image2, image3, image4]:
-                if img is not None:
-                    refs.append(_image_tensor_to_base64(img, with_prefix=True))
-            if refs:
-                payload["urls"] = refs
-
-            sse_headers = dict(headers)
-            sse_headers["Accept"] = "text/event-stream"
-            _haoee_log_http_request(self.NODE_NAME, payload, headers=sse_headers, label="create")
-
-            pbar.update_absolute(25)
-            request_url = f"{baseurl}/v1/draw/completions"
-            _haoee_log(self.NODE_NAME, f"POST {request_url} (SSE)")
-
-            response = requests.post(
-                request_url,
-                headers=sse_headers,
-                json=payload,
-                timeout=self.timeout,
-                stream=True,
-            )
-            content_type = response.headers.get("Content-Type", "")
-            if response.status_code != 200:
-                _haoee_raise_http(self.NODE_NAME, response, hint="draw/completions")
-            else:
-                _haoee_log(self.NODE_NAME, f"response status={response.status_code}, content_type={content_type!r}")
-
-            is_sse = ("text/event-stream" in content_type) or (not content_type)
-            result = None
-
-            if is_sse:
-                _haoee_log(self.NODE_NAME, "parsing SSE stream")
-                last_progress = -1
-                last_status = None
-                event_count = 0
-
-                for raw_line in response.iter_lines(decode_unicode=True):
-                    if raw_line is None:
-                        continue
-                    line = raw_line.strip()
-                    if not line:
-                        continue
-                    if not line.startswith("data:"):
-                        _haoee_log(self.NODE_NAME, f"sse non-data line: {line[:120]}")
-                        continue
-                    data_str = line[len("data:"):].strip()
-                    if not data_str or data_str == "[DONE]":
-                        continue
-                    try:
-                        evt = json.loads(data_str)
-                    except Exception as e:
-                        _haoee_log(self.NODE_NAME, f"sse invalid JSON: {data_str[:200]!r}, err={e}")
-                        continue
-
-                    event_count += 1
-                    progress = evt.get("progress")
-                    status = evt.get("status")
-                    failure_reason = (evt.get("failure_reason") or "").strip()
-                    err = (evt.get("error") or "").strip()
-
-                    status_changed = status != last_status
-                    log_this = False
-                    if status_changed:
-                        log_this = True
-                    elif isinstance(progress, int) and isinstance(last_progress, int) and progress - last_progress >= 10:
-                        log_this = True
-                    if log_this:
-                        _haoee_log(self.NODE_NAME, f"sse event#{event_count}: status={status!r}, progress={progress}")
-                        if status_changed:
-                            _haoee_log(self.NODE_NAME, f"sse event#{event_count} full={json.dumps(evt, ensure_ascii=False)}")
-                        last_status = status
-                        if isinstance(progress, int):
-                            last_progress = progress
-                            mapped = 25 + int(progress * 0.7)
-                            pbar.update_absolute(min(95, max(25, mapped)))
-
-                    if failure_reason or err or status == "failed":
-                        msg = failure_reason or err or "task failed"
-                        _haoee_log(self.NODE_NAME, f"sse failure event full={json.dumps(evt, ensure_ascii=False)}")
-                        _haoee_raise_api(self.NODE_NAME, f"task failed: {msg}")
-
-                    if status == "succeeded":
-                        result = evt
-                        _haoee_log(self.NODE_NAME, f"sse succeeded at event#{event_count}")
-                        _haoee_log(self.NODE_NAME, f"sse succeeded event full={json.dumps(evt, ensure_ascii=False)}")
-                        break
-
-                _haoee_log(self.NODE_NAME, f"sse stream finished, total_events={event_count}")
-                if result is None:
-                    _haoee_raise_parse(self.NODE_NAME, f"SSE stream ended without a succeeded event (events={event_count})")
-            else:
-                _haoee_log(self.NODE_NAME, "content_type is not SSE, fallback to JSON parsing")
-                result = _haoee_safe_json_parse(response, log_prefix, node=self.NODE_NAME)
-
-            pbar.update_absolute(95)
-
-            combined_tensor, response_info = _haoee_parse_results_payload(
-                result, prompt, model, size, node=self.NODE_NAME,
             )
             _haoee_log(self.NODE_NAME, f"parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
             pbar.update_absolute(100)
@@ -3562,7 +3362,6 @@ class Comfly_HaoeeImage_Gpt_Image2_Vip:
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
                 "modelName": model,
-                "lineType": "main",
             }
 
             payload = {
@@ -3653,113 +3452,6 @@ class Comfly_HaoeeImage_Gpt_Image2_Vip:
             traceback.print_exc()
             _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
-
-class Comfly_HaoeeImage_Gpt_Image2_Edit:
-    NODE_NAME = "GptImg2Edit"
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "image": ("IMAGE",),
-                "prompt": ("STRING", {"multiline": True}),
-                "model": (["gpt-image-2"], {"default": "gpt-image-2"}),
-                "api_key": ("STRING", {"default": ""}),
-            },
-            "optional": {
-                "size": (["1024x1024", "1536x1024", "1024x1536"], {"default": "1024x1024"}),
-                "response_format": (["b64_json", "url"], {"default": "b64_json"}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
-            }
-        }
-
-    RETURN_TYPES = ("IMAGE", "STRING")
-    RETURN_NAMES = ("generated_image", "response")
-    FUNCTION = "edit_image"
-    CATEGORY = "好易/Image"
-
-    def __init__(self):
-        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
-        self.api_key = None
-
-    def edit_image(self, image, prompt, model, api_key,
-                   size="1024x1024", response_format="b64_json", seed=0):
-        log_prefix = f"[{self.NODE_NAME}]"
-        _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size}, response_format={response_format}, "
-              f"prompt_len={len(prompt)}, seed={seed}")
-
-        if api_key.strip():
-            self.api_key = api_key
-            _haoee_log(self.NODE_NAME, f"api_key overridden by input (len={len(api_key.strip())})")
-
-        if not self.api_key:
-            _haoee_raise_local(self.NODE_NAME, "API key not provided")
-
-        if image is None:
-            _haoee_raise_local(self.NODE_NAME, "image not provided")
-
-        try:
-            pbar = comfy.utils.ProgressBar(100)
-            pbar.update_absolute(10)
-
-            pil_image = tensor2pil(image)[0]
-            buf = BytesIO()
-            pil_image.save(buf, format="PNG")
-            buf.seek(0)
-            image_bytes = buf.getvalue()
-            buf.seek(0)
-            _haoee_log(self.NODE_NAME, f"image prepared: size={pil_image.size}, png_bytes={len(image_bytes)}")
-
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "modelName": model,
-                "lineType": "main",
-            }
-
-            data = {
-                "prompt": prompt,
-                "model": model,
-                "size": size,
-                "response_format": response_format,
-            }
-
-            files = {"image": ("image.png", buf, "image/png")}
-            _haoee_log_http_request(self.NODE_NAME, data, headers=headers, label="form", extra="files=[image.png]")
-
-            pbar.update_absolute(25)
-            request_url = f"{baseurl}/v1/images/edits"
-            _haoee_log(self.NODE_NAME, f"POST {request_url}")
-            response = requests.post(
-                request_url,
-                headers=headers,
-                data=data,
-                files=files,
-                timeout=self.timeout,
-            )
-            if response.status_code != 200:
-                _haoee_raise_http(self.NODE_NAME, response, hint="images/edits")
-            _haoee_log_http_response(self.NODE_NAME, response)
-
-            result = _haoee_safe_json_parse(response, log_prefix, node=self.NODE_NAME)
-            pbar.update_absolute(60)
-
-            combined_tensor, response_info = _haoee_parse_images_payload(
-                result, prompt, model, size, response_format,
-                extra_headline="GPT Image 2 Edit",
-                node=self.NODE_NAME,
-            )
-            _haoee_log(self.NODE_NAME, f"parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
-            pbar.update_absolute(100)
-            _haoee_log(self.NODE_NAME, "<== done")
-            return (combined_tensor, response_info)
-
-        except HaoeeNodeError:
-            raise
-        except requests.exceptions.RequestException as e:
-            _haoee_raise_network(self.NODE_NAME, e)
-        except Exception as e:
-            traceback.print_exc()
-            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
 class Comfly_HaoeeText:
@@ -4194,10 +3886,8 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_HaoeeImage_Doubao_Seedream": Comfly_HaoeeImage_Doubao_Seedream,
     "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
     "Comfly_HaoeeVideo_Grok_Video_3": Comfly_HaoeeVideo_Grok_Video_3,
-    # "Comfly_HaoeeImage_Gpt_Image2_Generations": Comfly_HaoeeImage_Gpt_Image2_Generations,
-    "Comfly_HaoeeImage_Gpt_Image2_Generations_Test": Comfly_HaoeeImage_Gpt_Image2_Generations_Test,
+    "Comfly_HaoeeImage_Gpt_Image2_Generations": Comfly_HaoeeImage_Gpt_Image2_Generations,
     "Comfly_HaoeeImage_Gpt_Image2_Vip": Comfly_HaoeeImage_Gpt_Image2_Vip,
-    # "Comfly_HaoeeImage_Gpt_Image2_Edit": Comfly_HaoeeImage_Gpt_Image2_Edit,
     "Comfly_HaoeeImage_Midjourney": Comfly_HaoeeImage_Midjourney,
     # "Comfly_HaoeeImage_Nano_banana2": Comfly_HaoeeImage_Nano_banana2,
     "Comfly_HaoeeText": Comfly_HaoeeText,
@@ -4221,10 +3911,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeImage_Gemini": "好易 绘图 Gemini",
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
     "Comfly_HaoeeVideo_Grok_Video_3": "好易 视频 Grok Video 3",
-    # "Comfly_HaoeeImage_Gpt_Image2_Generations": "好易 绘图 GPT Image2 图片生成",
-    "Comfly_HaoeeImage_Gpt_Image2_Generations_Test": "好易 绘图 GPT Image2 图片生成(测试渠道)",
+    "Comfly_HaoeeImage_Gpt_Image2_Generations": "好易 绘图 GPT Image2",
     "Comfly_HaoeeImage_Gpt_Image2_Vip": "好易 绘图 GPT Image2 VIP",
-    # "Comfly_HaoeeImage_Gpt_Image2_Edit": "好易 绘图 GPT Image2 图片编辑",
     "Comfly_HaoeeImage_Doubao_Seedream": "好易 绘图 Doubao Seedream",
     "Comfly_HaoeeImage_Midjourney": "好易 绘图 Midjourney",
     # "Comfly_HaoeeImage_Nano_banana2": "好易 绘图 Nano banana2",
