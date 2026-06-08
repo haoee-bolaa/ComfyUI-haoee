@@ -2200,7 +2200,7 @@ class Comfly_HaoeeImage_Gemini:
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["gemini-3-pro-image-preview", "gemini-3.1-flash-image-preview"], {"default": "gemini-3-pro-image-preview"}),
+                "model": (["gemini-3-pro-image-preview", "gemini-3.1-flash-image-preview","gemini-3-pro-image-preview-lite","gemini-3.1-flash-image-preview-lite"], {"default": "gemini-3-pro-image-preview"}),
                 "aspectRatio": (["auto", "1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"], {"default": "auto"}),
                 "imageSize": (["1K", "2K", "4K"], {"default": "1K"}),
                 "apikey": ("STRING", {"default": ""}),
@@ -2296,7 +2296,8 @@ class Comfly_HaoeeImage_Gemini:
             if seed > 0:
                 payload["seed"] = seed
 
-            api_model = model
+            # api_model 用于拼接请求 URL：-lite 模型需去掉 -lite 后缀，header 仍传原始名称
+            api_model = model[:-len("-lite")] if model.endswith("-lite") else model
             url = f"{baseurl}/v1beta/models/{api_model}:generateContent"
             _haoee_log(self.NODE_NAME, f"POST {url}")
             _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
@@ -3203,7 +3204,18 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
                 "model": (["gpt-image-2"], {"default": "gpt-image-2"}),
-                "size": (["1024x1024", "1536x1024", "1024x1536"], {"default": "1024x1024"}),
+                "size": ([
+                    "1024x1024（1K 1:1）", "2048x2048（2K 1:1）", "2880x2880（4K 1:1）",
+                    "1280x720（1K 16:9）", "2048x1152（2K 16:9）", "3840x2160（4K 16:9）",
+                    "720x1280（1K 9:16）", "1152x2048（2K 9:16）", "2160x3840（4K 9:16）",
+                    "1024x768（1K 4:3）", "2048x1536（2K 4:3）", "3264x2448（4K 4:3）",
+                    "768x1024（1K 3:4）", "1536x2048（2K 3:4）", "2448x3264（4K 3:4）",
+                    "1008x672（1K 3:2）", "2016x1344（2K 3:2）", "3504x2336（4K 3:2）",
+                    "672x1008（1K 2:3）", "1344x2016（2K 2:3）", "2336x3504（4K 2:3）",
+                    "1040x832（1K 5:4）", "2080x1664（2K 5:4）", "3200x2560（4K 5:4）",
+                    "832x1040（1K 4:5）", "1664x2080（2K 4:5）", "2560x3200（4K 4:5）",
+                    "1344x576（1K 21:9）", "2016x864（2K 21:9）", "3696x1584（4K 21:9）",
+                ], {"default": "1024x1024（1K 1:1）"}),
                 "api_key": ("STRING", {"default": ""}),
             },
             "optional": {
@@ -3229,7 +3241,8 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
                        image1=None, image2=None, image3=None, image4=None, seed=0):
         log_prefix = f"[{self.NODE_NAME}]"
         ref_count = sum(1 for x in [image1, image2, image3, image4] if x is not None)
-        _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size}, response_format={response_format}, "
+        api_size = size.split("（", 1)[0].strip() if size else size
+        _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size} (api={api_size}), response_format={response_format}, "
               f"prompt_len={len(prompt)}, ref_images={ref_count}, seed={seed}")
 
         if api_key.strip():
@@ -3252,7 +3265,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
             payload = {
                 "model": model,
                 "prompt": prompt,
-                "size": size,
+                "size": api_size,
                 "response_format": response_format,
             }
 
@@ -3261,7 +3274,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
                 if img is not None:
                     refs.append(_image_tensor_to_base64(img, with_prefix=True))
             if refs:
-                payload["image"] = refs
+                payload["images"] = refs
             _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
 
             pbar.update_absolute(25)
@@ -3281,7 +3294,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
             pbar.update_absolute(60)
 
             combined_tensor, response_info = _haoee_parse_images_payload(
-                result, prompt, model, size, response_format,
+                result, prompt, model, api_size, response_format,
                 extra_headline="GPT Image 2 Generation",
                 node=self.NODE_NAME,
             )
@@ -3299,30 +3312,31 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
             _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
-class Comfly_HaoeeImage_Gpt_Image2_Vip:
-    NODE_NAME = "GptImg2Vip"
+class Comfly_HaoeeImage_Gpt_Image2_PerCount:
+    NODE_NAME = "GptImg2PerCount"
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["gpt-image-2-vip"], {"default": "gpt-image-2-vip"}),
+                "model": (["gpt-image-2"], {"default": "gpt-image-2"}),
                 "size": ([
-                    "1024x1024（1K 1:1）", "2048x2048（2K 1:1）", "2880x2880（4K 1:1）",
-                    "1280x720（1K 16:9）", "2048x1152（2K 16:9）", "3840x2160（4K 16:9）",
-                    "720x1280（1K 9:16）", "1152x2048（2K 9:16）", "2160x3840（4K 9:16）",
-                    "1024x768（1K 4:3）", "2048x1536（2K 4:3）", "3264x2448（4K 4:3）",
-                    "768x1024（1K 3:4）", "1536x2048（2K 3:4）", "2448x3264（4K 3:4）",
-                    "1008x672（1K 3:2）", "2016x1344（2K 3:2）", "3504x2336（4K 3:2）",
-                    "672x1008（1K 2:3）", "1344x2016（2K 2:3）", "2336x3504（4K 2:3）",
-                    "1040x832（1K 5:4）", "2080x1664（2K 5:4）", "3200x2560（4K 5:4）",
-                    "832x1040（1K 4:5）", "1664x2080（2K 4:5）", "2560x3200（4K 4:5）",
-                    "1344x576（1K 21:9）", "2016x864（2K 21:9）", "3696x1584（4K 21:9）",
+                    "1024x1024（1K 1:1）", "2048x2048（2K 1:1）",
+                    "1280x720（1K 16:9）", "2048x1152（2K 16:9）",
+                    "720x1280（1K 9:16）", "1152x2048（2K 9:16）",
+                    "1024x768（1K 4:3）", "2048x1536（2K 4:3）",
+                    "768x1024（1K 3:4）", "1536x2048（2K 3:4）",
+                    "1008x672（1K 3:2）", "2016x1344（2K 3:2）",
+                    "672x1008（1K 2:3）", "1344x2016（2K 2:3）",
+                    "1040x832（1K 5:4）", "2080x1664（2K 5:4）",
+                    "832x1040（1K 4:5）", "1664x2080（2K 4:5）",
+                    "1344x576（1K 21:9）", "2016x864（2K 21:9）",
                 ], {"default": "1024x1024（1K 1:1）"}),
                 "api_key": ("STRING", {"default": ""}),
             },
             "optional": {
+                "response_format": (["b64_json", "url"], {"default": "b64_json"}),
                 "image1": ("IMAGE",),
                 "image2": ("IMAGE",),
                 "image3": ("IMAGE",),
@@ -3340,11 +3354,12 @@ class Comfly_HaoeeImage_Gpt_Image2_Vip:
         self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = None
 
-    def generate_image(self, prompt, model, size, api_key,
+    def generate_image(self, prompt, model, size, api_key, response_format="b64_json",
                        image1=None, image2=None, image3=None, image4=None, seed=0):
+        log_prefix = f"[{self.NODE_NAME}]"
         ref_count = sum(1 for x in [image1, image2, image3, image4] if x is not None)
         api_size = size.split("（", 1)[0].strip() if size else size
-        _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size} (api={api_size}), "
+        _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size} (api={api_size}), response_format={response_format}, "
               f"prompt_len={len(prompt)}, ref_images={ref_count}, seed={seed}")
 
         if api_key.strip():
@@ -3361,14 +3376,14 @@ class Comfly_HaoeeImage_Gpt_Image2_Vip:
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
-                "modelName": model,
+                "ModelName": "gpt-image-2-1k2k",
             }
 
             payload = {
                 "model": model,
                 "prompt": prompt,
                 "size": api_size,
-                "shutProgress": True,
+                "response_format": response_format,
             }
 
             refs = []
@@ -3376,68 +3391,167 @@ class Comfly_HaoeeImage_Gpt_Image2_Vip:
                 if img is not None:
                     refs.append(_image_tensor_to_base64(img, with_prefix=True))
             if refs:
-                payload["urls"] = refs
+                payload["images"] = refs
             _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
 
             pbar.update_absolute(25)
-            request_url = f"{baseurl}/v1/draw/completions"
+            request_url = f"{baseurl}/v1/images/generations"
             _haoee_log(self.NODE_NAME, f"POST {request_url}")
-
             response = requests.post(
                 request_url,
                 headers=headers,
                 json=payload,
                 timeout=self.timeout,
             )
-            content_type = response.headers.get("Content-Type", "")
             if response.status_code != 200:
-                _haoee_raise_http(self.NODE_NAME, response, hint="draw/completions")
-            _haoee_log_http_response(self.NODE_NAME, response, extra=f"content_type={content_type!r}")
+                _haoee_raise_http(self.NODE_NAME, response, hint="generations")
+            _haoee_log_http_response(self.NODE_NAME, response)
 
-            try:
-                result = response.json()
-                _haoee_log(self.NODE_NAME, "parsed as plain JSON")
-            except Exception as je:
-                raw_text = response.text or ""
-                _haoee_log(self.NODE_NAME, f"plain JSON parse failed ({je}); falling back to SSE-style data: prefix parsing")
-                result = None
-                last_evt = None
-                for raw_line in raw_text.splitlines():
-                    line = raw_line.strip()
-                    if not line.startswith("data:"):
-                        continue
-                    data_str = line[len("data:"):].strip()
-                    if not data_str or data_str == "[DONE]":
-                        continue
-                    try:
-                        evt = json.loads(data_str)
-                    except Exception:
-                        continue
-                    last_evt = evt
-                    if isinstance(evt, dict) and evt.get("status") == "succeeded":
-                        result = evt
-                        break
-                if result is None:
-                    result = last_evt
-                if result is None:
-                    _haoee_raise_parse(self.NODE_NAME, "failed to parse response body", preview=raw_text)
-                _haoee_log(self.NODE_NAME, "parsed via SSE-style fallback")
+            result = _haoee_safe_json_parse(response, log_prefix, node=self.NODE_NAME)
+            pbar.update_absolute(60)
 
-            status = (result.get("status") if isinstance(result, dict) else "") or ""
-            failure_reason = ((result.get("failure_reason") if isinstance(result, dict) else "") or "").strip()
-            err = ((result.get("error") if isinstance(result, dict) else "") or "").strip()
-            _haoee_log(self.NODE_NAME, f"result status={status!r}, progress={result.get('progress') if isinstance(result, dict) else 'n/a'}")
+            combined_tensor, response_info = _haoee_parse_images_payload(
+                result, prompt, model, api_size, response_format,
+                extra_headline="GPT Image 2 Generation (PerCount)",
+                node=self.NODE_NAME,
+            )
+            _haoee_log(self.NODE_NAME, f"parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
+            pbar.update_absolute(100)
+            _haoee_log(self.NODE_NAME, "<== done")
+            return (combined_tensor, response_info)
 
-            if failure_reason or err or status == "failed":
-                msg = failure_reason or err or "task failed"
-                _haoee_raise_api(self.NODE_NAME, f"task failed: {msg}")
-            if status and status != "succeeded":
-                _haoee_log(self.NODE_NAME, f"WARN unexpected status={status!r}, full={json.dumps(result, ensure_ascii=False)}")
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
+        except Exception as e:
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
-            pbar.update_absolute(85)
 
-            combined_tensor, response_info = _haoee_parse_results_payload(
-                result, prompt, model, size, node=self.NODE_NAME,
+class Comfly_HaoeeImage_Gpt_Image2_4K:
+    NODE_NAME = "GptImg24K"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "prompt": ("STRING", {"multiline": True}),
+                "model": (["gpt-image-2"], {"default": "gpt-image-2"}),
+                "size": ([
+                    "1024x1024（1K 1:1）", "2048x2048（2K 1:1）", "2880x2880（4K 1:1）",
+                    "1280x720（1K 16:9）", "2048x1152（2K 16:9）", "3840x2160（4K 16:9）",
+                    "720x1280（1K 9:16）", "1152x2048（2K 9:16）", "2160x3840（4K 9:16）",
+                    "1024x768（1K 4:3）", "2048x1536（2K 4:3）", "3264x2448（4K 4:3）",
+                    "768x1024（1K 3:4）", "1536x2048（2K 3:4）", "2448x3264（4K 3:4）",
+                    "1008x672（1K 3:2）", "2016x1344（2K 3:2）", "3504x2336（4K 3:2）",
+                    "672x1008（1K 2:3）", "1344x2016（2K 2:3）", "2336x3504（4K 2:3）",
+                    "1040x832（1K 5:4）", "2080x1664（2K 5:4）", "3200x2560（4K 5:4）",
+                    "832x1040（1K 4:5）", "1664x2080（2K 4:5）", "2560x3200（4K 4:5）",
+                    "1344x576（1K 21:9）", "2016x864（2K 21:9）", "3696x1584（4K 21:9）",
+                ], {"default": "3840x2160（4K 16:9）"}),
+                "api_key": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "image": ("IMAGE",),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("generated_image", "response")
+    FUNCTION = "generate_image"
+    CATEGORY = "好易/Image"
+
+    def __init__(self):
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
+        self.api_key = None
+
+    def generate_image(self, prompt, model, size, api_key, image=None, seed=0):
+        log_prefix = f"[{self.NODE_NAME}]"
+        has_ref_image = image is not None
+        api_size = size.split("（", 1)[0].strip() if size else size
+        _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size} (api={api_size}), "
+              f"prompt_len={len(prompt)}, has_ref_image={has_ref_image}, seed={seed}")
+
+        if api_key.strip():
+            self.api_key = api_key
+            _haoee_log(self.NODE_NAME, f"api_key overridden by input (len={len(api_key.strip())})")
+
+        if not self.api_key:
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "ModelName": "gpt-image-2-4k",
+            }
+
+            if has_ref_image:
+                pil_image = tensor2pil(image)[0]
+                png_buffer = BytesIO()
+                pil_image.save(png_buffer, format="PNG")
+                png_bytes = png_buffer.getvalue()
+
+                data = {
+                    "model": model,
+                    "prompt": prompt,
+                    "size": api_size,
+                    "response_format": "url",
+                }
+                files = {
+                    "image": ("image.png", png_bytes, "image/png"),
+                }
+                log_payload = {**data, "image": f"<png {len(png_bytes)} bytes>"}
+                _haoee_log_http_request(self.NODE_NAME, log_payload, headers=headers, label="create")
+
+                pbar.update_absolute(25)
+                request_url = f"{baseurl}/v1/images/edits"
+                _haoee_log(self.NODE_NAME, f"POST {request_url} (edits)")
+                response = requests.post(
+                    request_url,
+                    headers=headers,
+                    data=data,
+                    files=files,
+                    timeout=self.timeout,
+                )
+                response_format = "url"
+                hint = "edits"
+            else:
+                headers["Content-Type"] = "application/json"
+                payload = {
+                    "model": model,
+                    "prompt": prompt,
+                    "size": api_size,
+                }
+                _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
+
+                pbar.update_absolute(25)
+                request_url = f"{baseurl}/v1/images/generations"
+                _haoee_log(self.NODE_NAME, f"POST {request_url} (generations)")
+                response = requests.post(
+                    request_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=self.timeout,
+                )
+                response_format = ""
+                hint = "generations"
+
+            if response.status_code != 200:
+                _haoee_raise_http(self.NODE_NAME, response, hint=hint)
+            _haoee_log_http_response(self.NODE_NAME, response)
+
+            result = _haoee_safe_json_parse(response, log_prefix, node=self.NODE_NAME)
+            pbar.update_absolute(60)
+
+            combined_tensor, response_info = _haoee_parse_images_payload(
+                result, prompt, model, api_size, response_format,
+                extra_headline="GPT Image 2 4K",
+                node=self.NODE_NAME,
             )
             _haoee_log(self.NODE_NAME, f"parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
             pbar.update_absolute(100)
@@ -3887,7 +4001,8 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_HaoeeImage_gpt_image": Comfly_HaoeeImage_gpt_image,
     "Comfly_HaoeeVideo_Grok_Video_3": Comfly_HaoeeVideo_Grok_Video_3,
     "Comfly_HaoeeImage_Gpt_Image2_Generations": Comfly_HaoeeImage_Gpt_Image2_Generations,
-    "Comfly_HaoeeImage_Gpt_Image2_Vip": Comfly_HaoeeImage_Gpt_Image2_Vip,
+    "Comfly_HaoeeImage_Gpt_Image2_PerCount": Comfly_HaoeeImage_Gpt_Image2_PerCount,
+    "Comfly_HaoeeImage_Gpt_Image2_4K": Comfly_HaoeeImage_Gpt_Image2_4K,
     "Comfly_HaoeeImage_Midjourney": Comfly_HaoeeImage_Midjourney,
     # "Comfly_HaoeeImage_Nano_banana2": Comfly_HaoeeImage_Nano_banana2,
     "Comfly_HaoeeText": Comfly_HaoeeText,
@@ -3911,8 +4026,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeImage_Gemini": "好易 绘图 Gemini",
     "Comfly_HaoeeImage_gpt_image": "好易 绘图 GPT Image",
     "Comfly_HaoeeVideo_Grok_Video_3": "好易 视频 Grok Video 3",
-    "Comfly_HaoeeImage_Gpt_Image2_Generations": "好易 绘图 GPT Image2",
-    "Comfly_HaoeeImage_Gpt_Image2_Vip": "好易 绘图 GPT Image2 VIP",
+    "Comfly_HaoeeImage_Gpt_Image2_Generations": "好易 绘图 GPT Image2（按token）",
+    "Comfly_HaoeeImage_Gpt_Image2_PerCount": "好易 绘图 GPT Image2 2K（按次）",
+    "Comfly_HaoeeImage_Gpt_Image2_4K": "好易 绘图 GPT Image2 4K（按次）",
     "Comfly_HaoeeImage_Doubao_Seedream": "好易 绘图 Doubao Seedream",
     "Comfly_HaoeeImage_Midjourney": "好易 绘图 Midjourney",
     # "Comfly_HaoeeImage_Nano_banana2": "好易 绘图 Nano banana2",
