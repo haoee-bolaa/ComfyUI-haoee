@@ -1,6 +1,10 @@
 # 网站：[https://www.haoee.com/maas/services](https://www.haoee.com/maas/services)
 
 ## 更新日志
+- 2026年6月8日：《好易 绘图 GPT Image2》节点修改为《好易 绘图 GPT Image2（按token）》，支持1k、2k、4k
+- 2026年6月8日：新增《好易 绘图 GPT Image2 2K（按次）》节点，支持1k、2k
+- 2026年6月8日：新增《好易 绘图 GPT Image2 4K（按次）》节点，支持1k、2k、4k
+- 2026年6月8日：节点《好易 绘图 Gemini》新增 gemini-3-pro-image-preview-lite、gemini-3.1-flash-image-preview-lite 模型；
 - 2026年6月4日：上线《好易 绘图 GPT Image2》节点；取消《好易 绘图 GPT Image2 图片生成(测试渠道)》节点
 - 2026年5月14日：增加《好易 绘图 GPT Image2 VIP》节点
 - 2026年5月14日：修正《好易 视频 Sora2》节点，并移除sora-2-pro模型
