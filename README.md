@@ -1,6 +1,12 @@
 # 网站：[https://www.haoee.com/maas/services](https://www.haoee.com/maas/services)
 
 ## 更新日志
+- 2027年6月9日：修正《好易 绘图 GPT Image2（按token）》《好易 绘图 GPT Image2 2K（按次）》
+- 2026年6月9日：《好易 绘图 Doubao Seedream》节点增加：doubao-seedream-5-0-260128 模型
+- 2026年6月9日：《好易 LLM》节点增加：doubao-seed-2-0-lite-260215、gemini-3.1-pro-preview、gemini-3.5-flash模型
+- 2026年6月9日：《好易 LLM GPT5.4》节点改名为《好易 LLM GPT5》，并增加gpt-5.5模型
+- 2026年6月9日：移除《好易 LLM GPT》节点
+- 2026年6月9日：增加《好易 LLM Gemini》节点
 - 2026年6月8日：《好易 绘图 GPT Image2》节点修改为《好易 绘图 GPT Image2（按token）》，支持1k、2k、4k
 - 2026年6月8日：新增《好易 绘图 GPT Image2 2K（按次）》节点，支持1k、2k
 - 2026年6月8日：新增《好易 绘图 GPT Image2 4K（按次）》节点，支持1k、2k、4k

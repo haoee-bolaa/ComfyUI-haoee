@@ -2365,10 +2365,9 @@ class Comfly_HaoeeImage_Doubao_Seedream:
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
-                "model": (["doubao-seedream-4-5-251128", 'doubao-seedream-4-0-250828'], {"default": "doubao-seedream-4-5-251128"}),
+                "model": (["doubao-seedream-5-0-260128", "doubao-seedream-4-5-251128", "doubao-seedream-4-0-250828"], {"default": "doubao-seedream-5-0-260128"}),
                 "response_format": (["url", "b64_json"], {"default": "url"}),
-                "resolution": (["1K", "2K", "4K"], {"default": "1K"}),
-                "aspect_ratio": (["1:1", "2:3", "3:2", "4:3", "3:4", "16:9", "9:16"], {"default": "1:1"}),
+                "size": (["1K", "2K", "3K", "4K"], {"default": "2K"}),
                 "apikey": ("STRING", {"default": ""}),
             },
             "optional": {
@@ -2376,7 +2375,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
                 "image2": ("IMAGE",),
                 "image3": ("IMAGE",),
                 "image4": ("IMAGE",),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647})  
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647})
             }
         }
     
@@ -2387,48 +2386,11 @@ class Comfly_HaoeeImage_Doubao_Seedream:
 
     def __init__(self):
         self.timeout = HAOEE_HTTP_TIMEOUT_SEC
-        self.size_mapping = {
-            "1K": {
-                "1:1":  "1024x1024",
-                "4:3":  "1024x768",
-                "3:4":  "768x1024",
-                "16:9": "1024x576",
-                "9:16": "576x1024",
-                "2:3":  "682x1024",
-                "3:2":  "1024x682"
-            },
-
-            "2K": {
-                "1:1":  "2048x2048",
-                "4:3":  "2048x1536",
-                "3:4":  "1536x2048",
-                "16:9": "2560x1440",
-                "9:16": "1440x2560",
-                "2:3":  "1365x2048",
-                "3:2":  "2048x1365"
-            },
-
-            "4K": {
-                "1:1":  "4096x4096",
-                "4:3":  "4096x3072",
-                "3:4":  "3072x4096",
-                "16:9": "4096x2304",
-                "9:16": "2304x4096",
-                "2:3":  "2731x4096",
-                "3:2":  "4096x2731"
-            }
-        }
-
-        self.resolution_factors = {
-            "1K": 1,
-            "2K": 2,
-            "4K": 4
-        }
     
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=True)
     
-    def generate_image(self, prompt, model, response_format="url", resolution="1K", aspect_ratio="1:1", apikey="", 
+    def generate_image(self, prompt, model, response_format="url", size="2K", apikey="",
                   image1=None, image2=None, image3=None, image4=None, seed=0):
         if apikey.strip():
             self.api_key = apikey
@@ -2440,16 +2402,10 @@ class Comfly_HaoeeImage_Doubao_Seedream:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
 
-            if resolution in self.size_mapping and aspect_ratio in self.size_mapping[resolution]:
-                final_size = self.size_mapping[resolution][aspect_ratio]
-            else:
-                final_size = "1024x1024"
-                _haoee_log(self.NODE_NAME, f"WARN combination {resolution}+{aspect_ratio} not found, using {final_size}")
-            
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
-                "modelName": model
+                "ModelName": model,
             }
 
             all_images = [image1, image2, image3, image4]
@@ -2460,11 +2416,10 @@ class Comfly_HaoeeImage_Doubao_Seedream:
                 "model": model,
                 "prompt": prompt,
                 "response_format": response_format,
-                "size": final_size,
+                "size": size,
                 "sequential_image_generation": "disabled",
                 "watermark": False,
                 "stream": False,
-                "seed": seed if seed > 0 else 0
             }
             
             if img_count > 0:
@@ -2472,7 +2427,7 @@ class Comfly_HaoeeImage_Doubao_Seedream:
             
             _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
             response = requests.post(
-                f"{baseurl}/v1/images/generations",
+                f"{baseurl}/api/v3/images/generations",
                 headers=headers,
                 json=payload,
                 timeout=self.timeout
@@ -2531,14 +2486,12 @@ class Comfly_HaoeeImage_Doubao_Seedream:
             response_info = {
                 "prompt": prompt,
                 "model": model,
-                "resolution": resolution,
-                "size": final_size,
-                "seed": seed if seed != -1 else "auto",
+                "size": size,
                 "urls": image_urls if image_urls else [],
-                "aspect_ratio": aspect_ratio
+                "images_generated": len(generated_images),
             }
-
-            response_info["images_generated"] = len(generated_images)
+            if result.get("usage"):
+                response_info["usage"] = result["usage"]
 
             pbar.update_absolute(100)
             first_image_url = image_urls[0] if image_urls else ""
@@ -3274,7 +3227,7 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
                 if img is not None:
                     refs.append(_image_tensor_to_base64(img, with_prefix=True))
             if refs:
-                payload["images"] = refs
+                payload["image"] = refs
             _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
 
             pbar.update_absolute(25)
@@ -3391,7 +3344,7 @@ class Comfly_HaoeeImage_Gpt_Image2_PerCount:
                 if img is not None:
                     refs.append(_image_tensor_to_base64(img, with_prefix=True))
             if refs:
-                payload["images"] = refs
+                payload["image"] = refs
             _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
 
             pbar.update_absolute(25)
@@ -3569,6 +3522,7 @@ class Comfly_HaoeeImage_Gpt_Image2_4K:
 
 
 class Comfly_HaoeeText:
+    """好易 LLM 节点，对接 Haoee 原生 v1/chat/completions 接口。"""
     NODE_NAME = "Text"
 
     def __init__(self):
@@ -3583,11 +3537,14 @@ class Comfly_HaoeeText:
                     "deepseek-v3.2",
                     "claude-opus-4-5-20251101",
                     "doubao-seed-1-8-251228",
+                    "doubao-seed-2-0-lite-260215",
                     "qwen3-max",
                     "qwen3-vl-plus",
                     "qwen-plus",
                     "glm-4.7",
                     "glm-4.7-flash",
+                    "gemini-3.1-pro-preview",
+                    "gemini-3.5-flash",
                 ], {"default": "deepseek-r1"}),
                 "role": ("STRING", {"multiline": True, "default": "You are a helpful assistant"}),
                 "prompt": ("STRING", {"multiline": True, "default": "describe the image"}),
@@ -3703,125 +3660,18 @@ class Comfly_HaoeeText:
             _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
-class Comfly_HaoeeTextGPT:
-    NODE_NAME = "TextGPT"
-
-    def __init__(self):
-        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
-        self.api_key = ""
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "model": ([
-                    "gpt-5.2",
-                ], {"default": "gpt-5.2"}),
-
-                "prompt": ("STRING", {
-                    "multiline": True,
-                    "default": "describe the image"
-                }),
-
-                "temperature": ("FLOAT", {
-                    "default": 0.6,
-                    "min": 0.0,
-                    "max": 2.0,
-                    "step": 0.1
-                }),
-
-                "apikey": ("STRING", {"default": ""}),
-            }
-        }
-
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("response", "describe")
-    FUNCTION = "completions"
-    CATEGORY = "好易/Text"
-
-    def completions(self, apikey, model, prompt, temperature):
-
-        if apikey.strip():
-            self.api_key = apikey
-
-        if not self.api_key:
-            _haoee_raise_local(self.NODE_NAME, "API key not provided")
-
-        try:
-
-            pbar = comfy.utils.ProgressBar(100)
-            pbar.update_absolute(10)
-
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-                "modelName": model
-            }
-
-            payload = {
-                "model": model,
-                "input": prompt,
-                "temperature": temperature
-            }
-
-            _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
-            response = requests.post(
-                f"{baseurl}/api/v2/openai/responses",
-                headers=headers,
-                json=payload,
-                timeout=self.timeout
-            )
-
-            pbar.update_absolute(30)
-            if response.status_code != 200:
-                _haoee_raise_http(self.NODE_NAME, response, hint="responses")
-            _haoee_log_http_response(self.NODE_NAME, response, label="create")
-
-            result = response.json()
-
-            if result.get("error"):
-                _haoee_raise_api(self.NODE_NAME, f"chat error: {result['error']}")
-
-            prompt_result = ""
-
-            for item in result.get("output", []):
-                for c in item.get("content", []):
-                    if c.get("type") == "output_text":
-                        prompt_result += c.get("text", "")
-
-            if not prompt_result.strip():
-                _haoee_raise_api(self.NODE_NAME, "empty response content")
-
-            response_info = json.dumps({
-                "model": model,
-                "usage": result.get("usage", {}),
-            }, ensure_ascii=False, indent=2)
-
-            pbar.update_absolute(100)
-
-            return (response_info, prompt_result)
-
-        except HaoeeNodeError:
-            raise
-        except requests.exceptions.RequestException as e:
-            _haoee_raise_network(self.NODE_NAME, e)
-        except Exception as e:
-            traceback.print_exc()
-            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
-
-
-class Comfly_HaoeeTextGPT5_4:
+class Comfly_HaoeeTextGPT5:
     """
-    好易 LLM GPT-5.4 节点。
+    好易 LLM GPT5 节点。
 
-    gpt-5.4 和 gpt-5.4-pro 请求体 + 响应体都不同：
-      - gpt-5.4     : 请求 { model, messages, max_completion_tokens }
-                      响应 Chat Completions 格式 choices[0].message.content
-      - gpt-5.4-pro : 请求 { model, input }
-                      响应 Responses API 格式 output[].content[].output_text
+    支持 gpt-5.4 / gpt-5.5 / gpt-5.4-pro，请求体 + 响应体分两类：
+      - gpt-5.4 / gpt-5.5 : 请求 { model, messages:[{role, content:[{type,text}]}], max_completion_tokens }
+                            响应 Chat Completions 格式 choices[0].message.content
+      - gpt-5.4-pro       : 请求 { model, input:[{role, content}] }
+                            响应 Responses API 格式 output[].content[].output_text
     解析时按字段优先级分派：choices > output，兼容两种格式。
     """
-    NODE_NAME = "TextGPT5.4"
+    NODE_NAME = "TextGPT5"
 
     def __init__(self):
         self.timeout = HAOEE_HTTP_TIMEOUT_SEC
@@ -3834,7 +3684,8 @@ class Comfly_HaoeeTextGPT5_4:
                 "model": ([
                     "gpt-5.4",
                     "gpt-5.4-pro",
-                ], {"default": "gpt-5.4"}),
+                    "gpt-5.5",
+                ], {"default": "gpt-5.5"}),
 
                 "prompt": ("STRING", { "multiline": True, "default": "" }),
 
@@ -3873,7 +3724,7 @@ class Comfly_HaoeeTextGPT5_4:
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
-                "modelName": model
+                "ModelName": model
             }
 
             if model == "gpt-5.4-pro":
@@ -3903,7 +3754,7 @@ class Comfly_HaoeeTextGPT5_4:
                     ],
                     "max_completion_tokens": max_completion_tokens
                 }
-                _haoee_log(self.NODE_NAME, "payload schema=chat-completions-messages (gpt-5.4)")
+                _haoee_log(self.NODE_NAME, "payload schema=chat-completions-messages (gpt-5.4/gpt-5.5)")
 
             request_url = f"{baseurl}/v1/chat/completions"
             _haoee_log(self.NODE_NAME, f"POST {request_url}")
@@ -3985,6 +3836,124 @@ class Comfly_HaoeeTextGPT5_4:
             _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
+class Comfly_HaoeeTextGemini:
+    """好易 LLM Gemini 节点，对接 Gemini 原生 generateContent 接口。"""
+    NODE_NAME = "TextGemini"
+
+    def __init__(self):
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
+        self.api_key = ""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": (["gemini-3.1-pro-preview"], {"default": "gemini-3.1-pro-preview"}),
+                "system": ("STRING", {"multiline": True, "default": ""}),
+                "prompt": ("STRING", {"multiline": True, "default": ""}),
+                "temperature": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1}),
+                "apikey": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "top_p": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05}),
+                "include_thoughts": ("BOOLEAN", {"default": True}),
+                "thinking_budget": ("INT", {"default": 0, "min": 0, "max": 262144, "step": 1}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("response", "reasoning")
+    FUNCTION = "completions"
+    CATEGORY = "好易/Text"
+
+    def completions(self, apikey, model, system, prompt, temperature,
+                    top_p=1.0, include_thoughts=True, thinking_budget=0):
+        _haoee_log(self.NODE_NAME, f"==> start: model={model}, prompt_len={len(prompt)}, "
+              f"temperature={temperature}, top_p={top_p}, include_thoughts={include_thoughts}, "
+              f"thinking_budget={thinking_budget}")
+
+        if apikey.strip():
+            self.api_key = apikey
+            _haoee_log(self.NODE_NAME, f"apikey overridden by input (len={len(apikey.strip())})")
+
+        if not self.api_key:
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "ModelName": model,
+            }
+
+            thinking_config = {"includeThoughts": include_thoughts}
+            if thinking_budget > 0:
+                thinking_config["thinkingBudget"] = thinking_budget
+
+            payload = {
+                "contents": [{
+                    "role": "user",
+                    "parts": [{"text": prompt}],
+                }],
+                "generationConfig": {
+                    "temperature": temperature,
+                    "topP": top_p,
+                    "thinkingConfig": thinking_config,
+                },
+            }
+            if system.strip():
+                payload["systemInstruction"] = {"parts": [{"text": system}]}
+
+            url = f"{baseurl}/v1beta/models/{model}:generateContent"
+            _haoee_log(self.NODE_NAME, f"POST {url}")
+            _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+            )
+
+            pbar.update_absolute(30)
+            if response.status_code != 200:
+                _haoee_raise_http(self.NODE_NAME, response, hint="generateContent")
+            _haoee_log_http_response(self.NODE_NAME, response)
+
+            result = response.json()
+            pbar.update_absolute(60)
+
+            candidates = result.get("candidates") or []
+            content = candidates[0].get("content") if candidates else {}
+            parts = content.get("parts") or []
+            answers = []
+            thoughts = []
+            for part in parts:
+                if part.get("thought"):
+                    thoughts.append(part.get("text", ""))
+                elif "text" in part:
+                    answers.append(part["text"])
+
+            response_text = "\n".join(answers).strip()
+            reasoning_text = "\n".join(thoughts).strip()
+            if not response_text and not reasoning_text:
+                _haoee_raise_parse(self.NODE_NAME, "no text in response", preview=str(result))
+
+            pbar.update_absolute(100)
+            _haoee_log(self.NODE_NAME, f"<== done: response_len={len(response_text)}, reasoning_len={len(reasoning_text)}")
+            return (response_text, reasoning_text)
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
+        except Exception as e:
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
+
+
 NODE_CLASS_MAPPINGS = {
     "Comfly_Haoee_api_key": Comfly_Haoee_api_key,
     "Comfly_HaoeeVideo_MiniMax": Comfly_HaoeeVideo_MiniMax,
@@ -4006,8 +3975,8 @@ NODE_CLASS_MAPPINGS = {
     "Comfly_HaoeeImage_Midjourney": Comfly_HaoeeImage_Midjourney,
     # "Comfly_HaoeeImage_Nano_banana2": Comfly_HaoeeImage_Nano_banana2,
     "Comfly_HaoeeText": Comfly_HaoeeText,
-    "Comfly_HaoeeTextGPT": Comfly_HaoeeTextGPT,
-    "Comfly_HaoeeTextGPT5.4": Comfly_HaoeeTextGPT5_4,
+    "Comfly_HaoeeTextGPT5": Comfly_HaoeeTextGPT5,
+    "Comfly_HaoeeTextGemini": Comfly_HaoeeTextGemini,
 }
 
 
@@ -4033,8 +4002,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Comfly_HaoeeImage_Midjourney": "好易 绘图 Midjourney",
     # "Comfly_HaoeeImage_Nano_banana2": "好易 绘图 Nano banana2",
     "Comfly_HaoeeText": "好易 LLM",
-    "Comfly_HaoeeTextGPT": "好易 LLM GPT",
-    "Comfly_HaoeeTextGPT5.4": "好易 LLM GPT5.4",
+    "Comfly_HaoeeTextGPT5": "好易 LLM GPT5",
+    "Comfly_HaoeeTextGemini": "好易 LLM Gemini",
 }
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
