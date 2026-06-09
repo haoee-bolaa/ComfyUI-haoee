@@ -1,6 +1,8 @@
 # 网站：[https://www.haoee.com/maas/services](https://www.haoee.com/maas/services)
 
 ## 更新日志
+- 2026年6月9日：增加《好易 视频 Kling v3 Omni》
+- 2026年6月9日：增加《好易 视频 Kling v3》
 - 2027年6月9日：修正《好易 绘图 GPT Image2（按token）》《好易 绘图 GPT Image2 2K（按次）》
 - 2026年6月9日：《好易 绘图 Doubao Seedream》节点增加：doubao-seedream-5-0-260128 模型
 - 2026年6月9日：《好易 LLM》节点增加：doubao-seed-2-0-lite-260215、gemini-3.1-pro-preview、gemini-3.5-flash模型

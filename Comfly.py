@@ -905,6 +905,355 @@ class Comfly_HaoeeVideo_Kling:
             _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
 
 
+class Comfly_HaoeeVideo_KlingV3:
+    NODE_NAME = "KlingV3"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "prompt": ("STRING", {"multiline": True}),
+                "model": (["kling-v3"], {"default": "kling-v3"}),
+                "duration": (["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"], {"default": "5"}),
+                "api_key": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "image_tail": ("IMAGE",),
+                "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
+                "mode": (["std", "pro", "4k"], {"default": "std"}),
+                "sound": (["on", "off"], {"default": "off"}),
+                "cfg_scale": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05}),
+            }
+        }
+
+    RETURN_TYPES = (IO.VIDEO, "STRING", "STRING")
+    RETURN_NAMES = ("video", "task_id", "response")
+    FUNCTION = "generate_video"
+    CATEGORY = "好易/Video"
+
+    def __init__(self):
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
+        self.api_key = None
+
+    def image_to_base64(self, image_tensor):
+        return _image_tensor_to_base64(image_tensor, with_prefix=False)
+
+    def generate_video(self, image, prompt, model, duration, api_key, negative_prompt="", image_tail=None, mode="std", sound="off", cfg_scale=0.5):
+        if api_key.strip():
+            self.api_key = api_key
+
+        if not self.api_key:
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
+        if image is None:
+            _haoee_raise_local(self.NODE_NAME, "image not provided")
+
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "ModelName": "kling-v3",
+            }
+
+            payload = {
+                "model_name": "kling-v3",
+                "prompt": prompt,
+                "duration": duration,
+                "mode": mode,
+                "sound": sound,
+                "cfg_scale": cfg_scale,
+                "image": self.image_to_base64(image),
+            }
+
+            if negative_prompt:
+                payload["negative_prompt"] = negative_prompt
+
+            if image_tail is not None:
+                payload["image_tail"] = self.image_to_base64(image_tail)
+
+            _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
+            response = requests.post(
+                f"{baseurl}/v1/videos/image2video",
+                headers=headers,
+                json=payload,
+                timeout=self.timeout
+            )
+
+            pbar.update_absolute(20)
+            if response.status_code != 200:
+                _haoee_raise_http(self.NODE_NAME, response, hint="create task")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
+
+            result = response.json()
+            if result["code"] != 0:
+                _haoee_raise_api(self.NODE_NAME, f"create failed: code={result.get('code')}, message={result.get('message')}")
+
+            task_id = result["data"]["task_id"]
+
+            if not task_id:
+                _haoee_raise_parse(self.NODE_NAME, "task_id missing in create response", preview=str(result))
+
+            pbar.update_absolute(30)
+            _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
+
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
+            attempts = 0
+            video_url = None
+
+            while time.monotonic() < poll_deadline:
+                time.sleep(10)
+                attempts += 1
+
+                try:
+                    status_response = requests.get(
+                        f"{baseurl}/v1/videos/image2video/{task_id}",
+                        headers=headers,
+                        timeout=self.timeout
+                    )
+                    if status_response.status_code != 200:
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
+
+                    status_data = status_response.json()
+                    if status_data.get("code", 0) != 0:
+                        _haoee_raise_api(self.NODE_NAME, f"poll failed: code={status_data.get('code')}, message={status_data.get('message')}")
+
+                    status = status_data["data"]["task_status"]
+
+                    progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
+                    pbar.update_absolute(progress_value)
+
+                    if status == "succeed":
+                        video_url = status_data["data"]["task_result"]["videos"][0]["url"]
+                        break
+
+                    elif status == "failed":
+                        fail_reason = status_data["data"].get("task_status_msg", "Unknown error")
+                        _haoee_raise_api(self.NODE_NAME, f"task failed: {fail_reason}")
+
+                except requests.exceptions.RequestException as e:
+                    _haoee_log(self.NODE_NAME, f"poll request error: {e}")
+
+            if not video_url:
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
+
+            video_adapter = ComflyVideoAdapter(video_url)
+
+            pbar.update_absolute(100)
+
+            response_data = {
+                "status": "success",
+                "task_id": task_id,
+                "prompt": prompt,
+                "model_name": "kling-v3",
+                "duration": duration,
+                "mode": mode,
+                "video_url": video_url
+            }
+
+            return (video_adapter, task_id, json.dumps(response_data, ensure_ascii=False))
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
+        except Exception as e:
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
+
+
+class Comfly_HaoeeVideo_KlingV3Omni:
+    NODE_NAME = "KlingV3Omni"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "prompt": ("STRING", {"multiline": True}),
+                "model": (["kling-v3-omni"], {"default": "kling-v3-omni"}),
+                "duration": (["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"], {"default": "5"}),
+                "aspect_ratio": (["16:9", "9:16", "1:1"], {"default": "16:9"}),
+                "api_key": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "image_tail": ("IMAGE",),
+                "ref_image_1": ("IMAGE",),
+                "ref_image_2": ("IMAGE",),
+                "ref_image_3": ("IMAGE",),
+                "ref_image_4": ("IMAGE",),
+                "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
+                "mode": (["std", "pro", "4k"], {"default": "std"}),
+                "sound": (["on", "off"], {"default": "off"}),
+            }
+        }
+
+    RETURN_TYPES = (IO.VIDEO, "STRING", "STRING")
+    RETURN_NAMES = ("video", "task_id", "response")
+    FUNCTION = "generate_video"
+    CATEGORY = "好易/Video"
+
+    def __init__(self):
+        self.timeout = HAOEE_HTTP_TIMEOUT_SEC
+        self.api_key = None
+
+    def image_to_base64(self, image_tensor):
+        return _image_tensor_to_base64(image_tensor, with_prefix=False)
+
+    def generate_video(
+        self,
+        image,
+        prompt,
+        model,
+        duration,
+        aspect_ratio,
+        api_key,
+        image_tail=None,
+        ref_image_1=None,
+        ref_image_2=None,
+        ref_image_3=None,
+        ref_image_4=None,
+        negative_prompt="",
+        mode="std",
+        sound="off",
+    ):
+        if api_key.strip():
+            self.api_key = api_key
+
+        if not self.api_key:
+            _haoee_raise_local(self.NODE_NAME, "API key not provided")
+
+        if image is None:
+            _haoee_raise_local(self.NODE_NAME, "image not provided")
+
+        try:
+            pbar = comfy.utils.ProgressBar(100)
+            pbar.update_absolute(10)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "ModelName": "kling-v3-omni",
+            }
+
+            image_list = [{"image_url": self.image_to_base64(image), "type": "first_frame"}]
+            if image_tail is not None:
+                image_list.append({"image_url": self.image_to_base64(image_tail), "type": "end_frame"})
+            for ref in (ref_image_1, ref_image_2, ref_image_3, ref_image_4):
+                if ref is not None:
+                    image_list.append({"image_url": self.image_to_base64(ref)})
+
+            payload = {
+                "model_name": "kling-v3-omni",
+                "prompt": prompt,
+                "duration": duration,
+                "mode": mode,
+                "sound": sound,
+                "aspect_ratio": aspect_ratio,
+                "image_list": image_list,
+            }
+
+            if negative_prompt:
+                payload["negative_prompt"] = negative_prompt
+
+            _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
+            response = requests.post(
+                f"{baseurl}/v1/videos/omni-video",
+                headers=headers,
+                json=payload,
+                timeout=self.timeout
+            )
+
+            pbar.update_absolute(20)
+            if response.status_code != 200:
+                _haoee_raise_http(self.NODE_NAME, response, hint="create task")
+            _haoee_log_http_response(self.NODE_NAME, response, label="create")
+
+            result = response.json()
+            if result["code"] != 0:
+                _haoee_raise_api(self.NODE_NAME, f"create failed: code={result.get('code')}, message={result.get('message')}")
+
+            task_id = result["data"]["task_id"]
+
+            if not task_id:
+                _haoee_raise_parse(self.NODE_NAME, "task_id missing in create response", preview=str(result))
+
+            pbar.update_absolute(30)
+            _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
+
+            poll_started = time.monotonic()
+            poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
+            attempts = 0
+            video_url = None
+
+            while time.monotonic() < poll_deadline:
+                time.sleep(10)
+                attempts += 1
+
+                try:
+                    status_response = requests.get(
+                        f"{baseurl}/v1/videos/omni-video/{task_id}",
+                        headers=headers,
+                        timeout=self.timeout
+                    )
+                    if status_response.status_code != 200:
+                        _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
+                    _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
+
+                    status_data = status_response.json()
+                    if status_data.get("code", 0) != 0:
+                        _haoee_raise_api(self.NODE_NAME, f"poll failed: code={status_data.get('code')}, message={status_data.get('message')}")
+
+                    status = status_data["data"]["task_status"]
+
+                    progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
+                    pbar.update_absolute(progress_value)
+
+                    if status == "succeed":
+                        video_url = status_data["data"]["task_result"]["videos"][0]["url"]
+                        break
+
+                    elif status == "failed":
+                        fail_reason = status_data["data"].get("task_status_msg", "Unknown error")
+                        _haoee_raise_api(self.NODE_NAME, f"task failed: {fail_reason}")
+
+                except requests.exceptions.RequestException as e:
+                    _haoee_log(self.NODE_NAME, f"poll request error: {e}")
+
+            if not video_url:
+                _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
+
+            video_adapter = ComflyVideoAdapter(video_url)
+
+            pbar.update_absolute(100)
+
+            response_data = {
+                "status": "success",
+                "task_id": task_id,
+                "prompt": prompt,
+                "model_name": "kling-v3-omni",
+                "duration": duration,
+                "mode": mode,
+                "aspect_ratio": aspect_ratio,
+                "video_url": video_url
+            }
+
+            return (video_adapter, task_id, json.dumps(response_data, ensure_ascii=False))
+
+        except HaoeeNodeError:
+            raise
+        except requests.exceptions.RequestException as e:
+            _haoee_raise_network(self.NODE_NAME, e)
+        except Exception as e:
+            traceback.print_exc()
+            _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
+
+
 class Comfly_HaoeeVideo_vidu:
     NODE_NAME = "Vidu"
 
@@ -3960,6 +4309,8 @@ NODE_CLASS_MAPPINGS = {
     # "Comfly_HaoeeVideo_Sora2_Pro": Comfly_HaoeeVideo_Sora2_Pro,
     "Comfly_HaoeeVideo_Sora2": Comfly_HaoeeVideo_Sora2,
     "Comfly_HaoeeVideo_Kling": Comfly_HaoeeVideo_Kling,
+    "Comfly_HaoeeVideo_KlingV3": Comfly_HaoeeVideo_KlingV3,
+    "Comfly_HaoeeVideo_KlingV3Omni": Comfly_HaoeeVideo_KlingV3Omni,
     # "Comfly_HaoeeVideo_vidu": Comfly_HaoeeVideo_vidu,
     # "Comfly_HaoeeVideo_Veo3": Comfly_HaoeeVideo_Veo3,
     "Comfly_HaoeeVideo_Wan": Comfly_HaoeeVideo_Wan,
@@ -3987,6 +4338,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # "Comfly_HaoeeVideo_Sora2_Pro": "好易 视频 Sora2 Pro",
     "Comfly_HaoeeVideo_Sora2": "好易 视频 Sora2",
     "Comfly_HaoeeVideo_Kling": "好易 视频 Kling",
+    "Comfly_HaoeeVideo_KlingV3": "好易 视频 Kling v3",
+    "Comfly_HaoeeVideo_KlingV3Omni": "好易 视频 Kling v3 Omni",
     # "Comfly_HaoeeVideo_vidu": "好易 视频 Vidu",
     # "Comfly_HaoeeVideo_Veo3": "好易 视频 Veo3",
     "Comfly_HaoeeVideo_Wan": "好易 视频 Wan",
