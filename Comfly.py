@@ -2812,7 +2812,11 @@ class Comfly_HaoeeImage_Gpt_Image2_4K:
                 "api_key": ("STRING", {"default": ""}),
             },
             "optional": {
-                "image": ("IMAGE",),
+                "response_format": (["url", "b64_json"], {"default": "url"}),
+                "image1": ("IMAGE",),
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+                "image4": ("IMAGE",),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
             }
         }
@@ -2826,12 +2830,16 @@ class Comfly_HaoeeImage_Gpt_Image2_4K:
         self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = None
 
-    def generate_image(self, prompt, model, size, api_key, image=None, seed=0):
+    def generate_image(self, prompt, model, size, api_key, response_format="url",
+                       image1=None, image2=None, image3=None, image4=None, seed=0):
         log_prefix = f"[{self.NODE_NAME}]"
-        has_ref_image = image is not None
+        all_images = [image1, image2, image3, image4]
+        ref_imgs = [img for img in all_images if img is not None]
+        has_ref_image = len(ref_imgs) > 0
         api_size = size.split("（", 1)[0].strip() if size else size
         _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size} (api={api_size}), "
-              f"prompt_len={len(prompt)}, has_ref_image={has_ref_image}, seed={seed}")
+              f"response_format={response_format}, prompt_len={len(prompt)}, "
+              f"ref_images={len(ref_imgs)}, seed={seed}")
 
         if api_key.strip():
             self.api_key = api_key
@@ -2850,26 +2858,28 @@ class Comfly_HaoeeImage_Gpt_Image2_4K:
             }
 
             if has_ref_image:
-                pil_image = tensor2pil(image)[0]
-                png_buffer = BytesIO()
-                pil_image.save(png_buffer, format="PNG")
-                png_bytes = png_buffer.getvalue()
+                files = []
+                total_bytes = 0
+                for idx, img in enumerate(ref_imgs):
+                    pil_image = tensor2pil(img)[0]
+                    png_buffer = BytesIO()
+                    pil_image.save(png_buffer, format="PNG")
+                    png_bytes = png_buffer.getvalue()
+                    total_bytes += len(png_bytes)
+                    files.append(("image", (f"image{idx+1}.png", png_bytes, "image/png")))
 
                 data = {
                     "model": model,
                     "prompt": prompt,
                     "size": api_size,
-                    "response_format": "url",
+                    "response_format": response_format,
                 }
-                files = {
-                    "image": ("image.png", png_bytes, "image/png"),
-                }
-                log_payload = {**data, "image": f"<png {len(png_bytes)} bytes>"}
+                log_payload = {**data, "image": f"<{len(files)} png, {total_bytes} bytes>"}
                 _haoee_log_http_request(self.NODE_NAME, log_payload, headers=headers, label="create")
 
                 pbar.update_absolute(25)
                 request_url = f"{baseurl}/v1/images/edits"
-                _haoee_log(self.NODE_NAME, f"POST {request_url} (edits)")
+                _haoee_log(self.NODE_NAME, f"POST {request_url} (edits, {len(files)} images)")
                 response = requests.post(
                     request_url,
                     headers=headers,
@@ -2877,7 +2887,6 @@ class Comfly_HaoeeImage_Gpt_Image2_4K:
                     files=files,
                     timeout=self.timeout,
                 )
-                response_format = "url"
                 hint = "edits"
             else:
                 headers["Content-Type"] = "application/json"
@@ -2885,6 +2894,7 @@ class Comfly_HaoeeImage_Gpt_Image2_4K:
                     "model": model,
                     "prompt": prompt,
                     "size": api_size,
+                    "response_format": response_format,
                 }
                 _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
 
@@ -2897,7 +2907,6 @@ class Comfly_HaoeeImage_Gpt_Image2_4K:
                     json=payload,
                     timeout=self.timeout,
                 )
-                response_format = ""
                 hint = "generations"
 
             if response.status_code != 200:
