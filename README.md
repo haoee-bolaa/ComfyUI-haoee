@@ -1,6 +1,10 @@
 # 网站：[https://www.haoee.com/maas/services](https://www.haoee.com/maas/services)
 
 ## 更新日志
+- 2026年6月10日：《好易 LLM》节点添加：deepseek-v4-pro、deepseek-v4-flash、glm5.1模型，移除：deepseek-R1、deepseek-v3.2、GLM-4.7、GLM-4.7-Flash模型
+- 2026年6月10日：修正《好易 视频 Doubao》节点，并移除doubao-seedance-1-0-lite-i2v-250428模型
+- 2026年6月10日：修正《好易 视频 Wan》节点，添加：wan2.7-i2v模型，移除：wan2.6-i2v、wan2.6-i2v-flash模型
+- 2026年6月10日：修正《好易 视频 MiniMax》节点
 - 2026年6月9日：移除《好易 绘图 GPT Image》节点，请改用《好易 绘图 GPT Image2》系列节点
 - 2026年6月9日：《好易 视频 Kling》（支持 kling-video-o1 / kling-v3-omni）
 - 2026年6月9日：增加《好易 视频 Kling v3》

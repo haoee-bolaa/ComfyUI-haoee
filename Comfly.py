@@ -147,12 +147,12 @@ class Comfly_HaoeeVideo_MiniMax:
                 "prompt": ("STRING", {"multiline": True}),
                 "model": (["MiniMax-Hailuo-2.3-Fast", "MiniMax-Hailuo-2.3", "MiniMax-Hailuo-02"], {"default": "MiniMax-Hailuo-02"}),
                 "duration": (["6", "10"], {"default": "6"}),
-                "resolution": (["768P", "1080P"], {"default": "768P"}),
+                "resolution": (["512P", "768P", "1080P"], {"default": "768P"}),
                 "api_key": ("STRING", {"default": ""}),
             },
             "optional": {
                 "prompt_optimizer": ("BOOLEAN", {"default": True}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
+                "fast_pretreatment": ("BOOLEAN", {"default": False}),
             }
         }
     
@@ -167,7 +167,7 @@ class Comfly_HaoeeVideo_MiniMax:
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=True)
     
-    def generate_video(self, prompt, model="MiniMax-Hailuo-02", duration="6", resolution="768P", prompt_optimizer=True, image=None, api_key="", seed=0):
+    def generate_video(self, prompt, model="MiniMax-Hailuo-02", duration="6", resolution="768P", prompt_optimizer=True, fast_pretreatment=False, image=None, api_key=""):
         if api_key.strip():
             self.api_key = api_key
 
@@ -195,12 +195,12 @@ class Comfly_HaoeeVideo_MiniMax:
                 "resolution": resolution,
                 "first_frame_image": image_base64,
                 "prompt_optimizer": prompt_optimizer,
-                "seed": seed if seed > 0 else 0
+                "fast_pretreatment": fast_pretreatment,
             }
             
             _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
             response = requests.post(
-                f"{baseurl}/api/v2/hailuo/v1/video_generation", 
+                f"{baseurl}/v1/video_generation", 
                 headers=headers, 
                 json=payload, 
                 timeout=self.timeout
@@ -233,8 +233,9 @@ class Comfly_HaoeeVideo_MiniMax:
                 
                 try:
                     status_response = requests.get(
-                        f"{baseurl}/api/v2/get_task/{task_id}",
+                        f"{baseurl}/v1/query/video_generation",
                         headers=headers,
+                        params={"task_id": task_id},
                         timeout=self.timeout
                     )
                     if status_response.status_code != 200:
@@ -242,25 +243,14 @@ class Comfly_HaoeeVideo_MiniMax:
                     _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     status_result = status_response.json()
-                    state = status_result["data"]["state"]
+                    state = (status_result.get("status") or "").lower()
                     
                     progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
                     
                     if state == "success":
-                        data = status_result.get("data", {})
-                        data_info = data.get("data_info", {}).get("data", {})
-                        video_url = None
-                        # 优先 more_file_info
-                        more_file = data_info.get("more_file_info")
-                        if more_file and "download_url" in more_file:
-                            video_url = more_file["download_url"]
-                            file_id = more_file["file_id"]
-                        # 兜底 file_info[0]
-                        if not video_url:
-                            file_list = data_info.get("file_info", [])
-                            if file_list and "file_url" in file_list[0]:
-                                video_url = file_list[0]["file_url"]
+                        video_url = status_result.get("download_url")
+                        file_id = status_result.get("file_id")
 
                         if not video_url:
                             return (
@@ -269,7 +259,7 @@ class Comfly_HaoeeVideo_MiniMax:
                                 json.dumps(status_result, ensure_ascii=False)
                             )
                         break
-                    elif state == "failed":
+                    elif state in ("fail", "failed"):
                         fail_msg = status_result.get('base_resp', {}).get('status_msg', 'Unknown error')
                         _haoee_raise_api(self.NODE_NAME, f"task failed: {fail_msg}")
 
@@ -849,20 +839,21 @@ class Comfly_HaoeeVideo_Wan:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "image": ("IMAGE",),
-                "model": (["wan2.6-i2v-flash", "wan2.6-i2v"], {"default": "wan2.6-i2v-flash"}),
+                "model": (["wan2.7-i2v"], {"default": "wan2.7-i2v"}),
                 "prompt": ("STRING", {"multiline": True}),
                 "negative_prompt": ("STRING", {"multiline": True}),
                 "resolution": (["720P", "1080P"], {"default": "720P"}),
-                "duration": (["5", "10", "15"], {"default": "5"}),
-                "prompt_extend": ("BOOLEAN", {"default": False}),
-                "shot_type": (["single", "multi"], {"default": "single"}),
-                "audio": ("BOOLEAN", {"default": False}),
+                "duration": ("INT", {"default": 5, "min": 2, "max": 15}),
+                "prompt_extend": ("BOOLEAN", {"default": True}),
                 "watermark": ("BOOLEAN", {"default": False}),
                 "apikey": ("STRING", {"default": ""}),
             },
             "optional": {
-                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647})
+                "image": ("IMAGE",),
+                "last_frame": ("IMAGE",),
+                "audio_url": ("STRING", {"default": ""}),
+                "video_url": ("STRING", {"default": ""}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
             }
         }
     
@@ -873,22 +864,48 @@ class Comfly_HaoeeVideo_Wan:
 
     def __init__(self):
         self.timeout = HAOEE_HTTP_TIMEOUT_SEC
+        self.api_key = None
     
     def image_to_base64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=True)
     
-    def generate_video(self, model, prompt, negative_prompt, resolution="720P", duration="5", prompt_extend=False, shot_type="single", audio=False, watermark=False, apikey="", image=None, seed=0):
+    def generate_video(
+        self,
+        model,
+        prompt,
+        negative_prompt,
+        resolution="720P",
+        duration=5,
+        prompt_extend=True,
+        watermark=False,
+        apikey="",
+        image=None,
+        last_frame=None,
+        audio_url="",
+        video_url="",
+        seed=0,
+    ):
         if apikey.strip():
             self.api_key = apikey
 
         if not self.api_key:
             _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
-        if image is None:
-            _haoee_raise_local(self.NODE_NAME, "image not provided")
+        if model == "wan2.7-i2v" and image is None:
+            _haoee_raise_local(self.NODE_NAME, "image not provided for wan2.7-i2v")
 
-        if model == "wan2.6-i2v" and not audio:
-            audio = True
+        media = []
+        if image is not None:
+            media.append({"type": "first_frame", "url": self.image_to_base64(image)})
+        if video_url.strip():
+            media.append({"type": "first_clip", "url": video_url.strip()})
+        if last_frame is not None:
+            media.append({"type": "last_frame", "url": self.image_to_base64(last_frame)})
+        if audio_url.strip():
+            media.append({"type": "driving_audio", "url": audio_url.strip()})
+
+        if not media:
+            _haoee_raise_local(self.NODE_NAME, "no media provided")
             
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -897,25 +914,23 @@ class Comfly_HaoeeVideo_Wan:
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
-                "modelName": model
+                "ModelName": model,
+                "X-DashScope-Async": "enable",
             }
 
-            image_base64 = self.image_to_base64(image)
             payload = {
                 "model": model,
                 "input": {
                     "prompt": prompt,
                     "negative_prompt": negative_prompt if negative_prompt else "",
-                    "img_url": image_base64
+                    "media": media,
                 },
                 "parameters": {
                     "resolution": resolution,
-                    "duration": duration,
+                    "duration": int(duration),
                     "prompt_extend": prompt_extend,
-                    "shot_type": shot_type,
-                    "audio": audio,
                     "watermark": watermark,
-                    "seed": seed if seed > 0 else 0
+                    "seed": seed if seed > 0 else 0,
                 }
             }
 
@@ -991,9 +1006,11 @@ class Comfly_HaoeeVideo_Wan:
                 "prompt": prompt,
                 "model": model,
                 "resolution": resolution,
-                "duration": duration,
+                "duration": int(duration),
                 "negative_prompt": negative_prompt,
                 "prompt_extend": prompt_extend,
+                "watermark": watermark,
+                "seed": seed if seed > 0 else 0,
                 "video_url": video_url,
             }
             
@@ -1220,31 +1237,40 @@ def _haoee_raise_parse(node, msg, preview=""):
 
 class Comfly_HaoeeVideo_Doubao:
     NODE_NAME = "Doubao"
+    DOUBAO_CREATE_URL = f"{baseurl}/api/v3/contents/generations/tasks"
+    DOUBAO_QUERY_URL = f"{baseurl}/api/v3/contents/generations/tasks/{{id}}"
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "image": ("IMAGE",),
-                "prompt": ("STRING", {"multiline": True}),
+                "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "model": ([
                     "doubao-seedance-1-0-pro-250528",
-                    "doubao-seedance-1-0-lite-i2v-250428",
+                    "doubao-seedance-1-0-pro-fast-251015",
                     "doubao-seedance-1-5-pro-251215",
-                    "doubao-seedance-1-0-pro-fast-251015"
                 ], {"default": "doubao-seedance-1-0-pro-250528"}),
                 "resolution": (["480p", "720p", "1080p"], {"default": "720p"}),
-                "duration": ([5, 10], {"default": 5}),
-                "ratio": (["21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "9:21", "keep_ratio", "adaptive"], {"default": "16:9"}),
-                "apikey": ("STRING", {"default": ""})
+                "duration": ("INT", {"default": 5, "min": 2, "max": 12, "step": 1}),
+                "ratio": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "16:9"}),
+                "apikey": ("STRING", {"default": ""}),
             },
             "optional": {
-                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647})
-            }
+                "first_frame": ("IMAGE",),
+                "last_frame": ("IMAGE",),
+                "reference_image_1": ("IMAGE",),
+                "reference_image_2": ("IMAGE",),
+                "reference_image_3": ("IMAGE",),
+                "reference_image_4": ("IMAGE",),
+                "generate_audio": ("BOOLEAN", {"default": True}),
+                "watermark": ("BOOLEAN", {"default": False}),
+                "return_last_frame": ("BOOLEAN", {"default": False}),
+                "seed": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
+            },
         }
 
-    RETURN_TYPES = (IO.VIDEO, "STRING", "STRING")
-    RETURN_NAMES = ("video", "task_id", "response")
+    RETURN_TYPES = (IO.VIDEO, "IMAGE", "STRING", "STRING")
+    RETURN_NAMES = ("video", "last_frame", "task_id", "response")
     FUNCTION = "generate_video"
     CATEGORY = "好易/Video"
 
@@ -1252,18 +1278,57 @@ class Comfly_HaoeeVideo_Doubao:
         self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = None
 
-    def image_to_base64(self, image_tensor):
+    def _img_b64(self, image_tensor):
         return _image_tensor_to_base64(image_tensor, with_prefix=True)
 
-    def generate_video(self, prompt, model, resolution="720p", duration=5, ratio="16:9", apikey="", image=None, seed=0):
-        if apikey.strip():
-            self.api_key = apikey
+    def _empty_image(self):
+        return torch.zeros(1, 1, 1, 3)
+
+    def _download_last_frame(self, url):
+        try:
+            resp = requests.get(url, timeout=HAOEE_HTTP_TIMEOUT_SEC)
+            resp.raise_for_status()
+            pil_img = Image.open(BytesIO(resp.content))
+            return pil2tensor(pil_img)
+        except Exception as e:
+            _haoee_log(self.NODE_NAME, f"download last_frame failed: {e}")
+            return self._empty_image()
+
+    def generate_video(
+        self,
+        prompt,
+        model,
+        resolution="720p",
+        duration=5,
+        ratio="16:9",
+        apikey="",
+        first_frame=None,
+        last_frame=None,
+        reference_image_1=None,
+        reference_image_2=None,
+        reference_image_3=None,
+        reference_image_4=None,
+        generate_audio=True,
+        watermark=False,
+        return_last_frame=False,
+        seed=-1,
+    ):
+        if apikey and apikey.strip():
+            self.api_key = apikey.strip()
 
         if not self.api_key:
             _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
-        if image is None:
-            _haoee_raise_local(self.NODE_NAME, "image not provided")
+        prompt_preview = (prompt[:80] + "...") if prompt and len(prompt) > 80 else (prompt or "")
+        _haoee_log(
+            self.NODE_NAME,
+            f"call: model={model}, resolution={resolution}, duration={duration}, "
+            f"ratio={ratio}, generate_audio={generate_audio}, watermark={watermark}, "
+            f"return_last_frame={return_last_frame}, "
+            f"first_frame={first_frame is not None}, last_frame={last_frame is not None}, "
+            f"ref_imgs={sum(x is not None for x in (reference_image_1, reference_image_2, reference_image_3, reference_image_4))}, "
+            f"prompt={prompt_preview!r}",
+        )
 
         try:
             pbar = comfy.utils.ProgressBar(100)
@@ -1272,30 +1337,63 @@ class Comfly_HaoeeVideo_Doubao:
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
-                "modelName": model
+                "modelname": model,
             }
 
-            image_base64 = self.image_to_base64(image)
+            content = []
+            if prompt and prompt.strip():
+                content.append({"type": "text", "text": prompt})
+
+            if first_frame is not None:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": self._img_b64(first_frame)},
+                    "role": "first_frame",
+                })
+            if last_frame is not None:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": self._img_b64(last_frame)},
+                    "role": "last_frame",
+                })
+
+            for ref_img in (reference_image_1, reference_image_2, reference_image_3, reference_image_4):
+                if ref_img is not None:
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": self._img_b64(ref_img)},
+                        "role": "reference_image",
+                    })
+
+            if not content:
+                _haoee_raise_local(self.NODE_NAME, "content empty: need prompt or at least one image")
+
+            content_summary = [
+                {"type": item["type"], "role": item.get("role", "")} for item in content
+            ]
+            _haoee_log(self.NODE_NAME, f"content items ({len(content)}): {content_summary}")
+
             payload = {
                 "model": model,
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": image_base64}}
-                ],
+                "content": content,
                 "resolution": resolution,
                 "duration": int(duration),
-                "ratio": ratio
+                "ratio": ratio,
+                "generate_audio": bool(generate_audio),
+                "watermark": bool(watermark),
+                "return_last_frame": bool(return_last_frame),
             }
 
-            if seed > 0:
+            if seed != -1:
                 payload["seed"] = seed
 
+            _haoee_log(self.NODE_NAME, f"POST {self.DOUBAO_CREATE_URL}")
             _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
             response = requests.post(
-                f"{baseurl}/volc/v1/contents/generations/tasks",
+                self.DOUBAO_CREATE_URL,
                 headers=headers,
                 json=payload,
-                timeout=self.timeout
+                timeout=self.timeout,
             )
 
             pbar.update_absolute(20)
@@ -1304,21 +1402,19 @@ class Comfly_HaoeeVideo_Doubao:
             _haoee_log_http_response(self.NODE_NAME, response, label="create")
 
             result = response.json()
-
             task_id = result.get("id")
-            video_url = result.get("content", {}).get("video_url")
-
-            if video_url:
-                pbar.update_absolute(100)
-                _haoee_log(self.NODE_NAME, f"sync video_url={video_url}")
-                video_adapter = safe_video_adapter(video_url)
-                return (video_adapter, task_id, json.dumps(result, ensure_ascii=False))
+            if not task_id:
+                _haoee_raise_parse(self.NODE_NAME, "task id missing in create response", preview=str(result))
 
             pbar.update_absolute(30)
-            _haoee_log(self.NODE_NAME, f"task submitted (async): {task_id}")
+            _haoee_log(self.NODE_NAME, f"task submitted: {task_id}")
+
             poll_started = time.monotonic()
             poll_deadline = poll_started + HAOEE_POLL_TOTAL_TIMEOUT_SEC
             attempts = 0
+            video_url = None
+            last_frame_url = None
+            status_result = {}
 
             while time.monotonic() < poll_deadline:
                 time.sleep(10)
@@ -1326,27 +1422,35 @@ class Comfly_HaoeeVideo_Doubao:
 
                 try:
                     status_response = requests.get(
-                        f"{baseurl}/volc/v1/contents/generations/tasks/{task_id}",
+                        self.DOUBAO_QUERY_URL.format(id=task_id),
                         headers=headers,
-                        timeout=self.timeout
+                        timeout=self.timeout,
                     )
                     if status_response.status_code != 200:
                         _haoee_raise_http(self.NODE_NAME, status_response, hint=f"poll #{attempts}")
                     _haoee_log_http_response(self.NODE_NAME, status_response, label=f"poll #{attempts}")
 
                     status_result = status_response.json()
-                    status = status_result.get("status", "").lower()
-                    video_url = status_result.get("content", {}).get("video_url")
+                    task_status = (status_result.get("status") or "").lower()
+                    content_resp = status_result.get("content") or {}
 
                     progress_value = min(80, 40 + int((time.monotonic() - poll_started) * 40 / HAOEE_POLL_TOTAL_TIMEOUT_SEC))
                     pbar.update_absolute(progress_value)
 
-                    if status in ["succeeded", "success"] and video_url:
-                        _haoee_log(self.NODE_NAME, f"async video_url={video_url}")
-                        break
-                    elif status in ["failed", "failure"]:
-                        fail_reason = status_result.get("fail_reason", "Unknown error")
-                        _haoee_raise_api(self.NODE_NAME, f"task failed: {fail_reason}")
+                    if task_status == "succeeded":
+                        video_url = content_resp.get("video_url")
+                        last_frame_url = content_resp.get("last_frame_url")
+                        if video_url:
+                            _haoee_log(
+                                self.NODE_NAME,
+                                f"task {task_id} succeeded, last_frame_url={'yes' if last_frame_url else 'no'}",
+                            )
+                            break
+                        _haoee_raise_parse(self.NODE_NAME, "success but no video_url in response", preview=str(status_result))
+                    elif task_status in ("failed", "expired", "cancelled"):
+                        err = status_result.get("error") or {}
+                        err_msg = err.get("message") if isinstance(err, dict) else str(err)
+                        _haoee_raise_api(self.NODE_NAME, f"task {task_status}: {err_msg or 'Unknown error'}")
 
                 except requests.exceptions.RequestException as e:
                     _haoee_log(self.NODE_NAME, f"poll request error: {e}")
@@ -1354,19 +1458,19 @@ class Comfly_HaoeeVideo_Doubao:
             if not video_url:
                 _haoee_raise_parse(self.NODE_NAME, f"failed to get video url after {HAOEE_POLL_TOTAL_TIMEOUT_SEC}s poll timeout")
 
+            pbar.update_absolute(90)
+
+            if return_last_frame and last_frame_url:
+                _haoee_log(self.NODE_NAME, f"downloading last_frame: {last_frame_url}")
+                last_frame_tensor = self._download_last_frame(last_frame_url)
+            else:
+                last_frame_tensor = self._empty_image()
+
             pbar.update_absolute(100)
+            _haoee_log(self.NODE_NAME, f"done task_id={task_id}, video_url={video_url}")
+
             video_adapter = safe_video_adapter(video_url)
-            response_data = {
-                "code": "success",
-                "task_id": task_id,
-                "prompt": prompt,
-                "model": model,
-                "resolution": resolution,
-                "duration": int(duration),
-                "ratio": ratio,
-                "video_url": video_url
-            }
-            return (video_adapter, task_id, json.dumps(response_data, ensure_ascii=False))
+            return (video_adapter, last_frame_tensor, task_id, json.dumps(status_result, ensure_ascii=False))
 
         except HaoeeNodeError:
             raise
@@ -2835,19 +2939,18 @@ class Comfly_HaoeeText:
         return {
             "required": {
                 "model": ([
-                    "deepseek-r1",
-                    "deepseek-v3.2",
+                    "deepseek-v4-pro",
+                    "deepseek-v4-flash",
                     "claude-opus-4-5-20251101",
                     "doubao-seed-1-8-251228",
                     "doubao-seed-2-0-lite-260215",
                     "qwen3-max",
                     "qwen3-vl-plus",
                     "qwen-plus",
-                    "glm-4.7",
-                    "glm-4.7-flash",
+                    "glm-5.1",
                     "gemini-3.1-pro-preview",
                     "gemini-3.5-flash",
-                ], {"default": "deepseek-r1"}),
+                ], {"default": "deepseek-v4-pro"}),
                 "role": ("STRING", {"multiline": True, "default": "You are a helpful assistant"}),
                 "prompt": ("STRING", {"multiline": True, "default": "describe the image"}),
                 "temperature": ("FLOAT", {"default": 0.6,"min": 0.0, "max": 2.0, "step": 0.1}),
