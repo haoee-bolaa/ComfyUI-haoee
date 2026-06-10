@@ -1,7 +1,8 @@
 # 网站：[https://www.haoee.com/maas/services](https://www.haoee.com/maas/services)
 
 ## 更新日志
-- 2026年6月9日：增加《好易 视频 Kling v3 Omni》
+- 2026年6月9日：移除《好易 绘图 GPT Image》节点，请改用《好易 绘图 GPT Image2》系列节点
+- 2026年6月9日：《好易 视频 Kling》（支持 kling-video-o1 / kling-v3-omni）
 - 2026年6月9日：增加《好易 视频 Kling v3》
 - 2027年6月9日：修正《好易 绘图 GPT Image2（按token）》《好易 绘图 GPT Image2 2K（按次）》
 - 2026年6月9日：《好易 绘图 Doubao Seedream》节点增加：doubao-seedream-5-0-260128 模型
