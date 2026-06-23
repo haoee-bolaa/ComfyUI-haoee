@@ -1058,19 +1058,33 @@ _HAOEE_MEDIA_FIELD_KEYS = frozenset({
     "bytesbase64encoded", "first_frame_image", "base64array",
 })
 
+# 不透明长 token 字段（如 Gemini thoughtSignature）：URL-safe base64，可能使用非标准
+# padding（长度对 4 取余为 1），无法严格解码，仅按“长度 + 字符占比”脱敏。
+_HAOEE_OPAQUE_TOKEN_FIELD_KEYS = frozenset({
+    "thoughtsignature", "signature", "ciphertext", "token",
+})
+
+
+def _haoee_field_kind(key):
+    """返回字段类别用于日志脱敏：'media' 为可解码的媒体 base64，'opaque' 为不透明 token，否则 None。"""
+    if not isinstance(key, str):
+        return None
+    kl = key.lower()
+    if kl in _HAOEE_MEDIA_FIELD_KEYS or "b64" in kl or (kl.endswith("image") and kl != "image_size"):
+        return "media"
+    if kl in _HAOEE_OPAQUE_TOKEN_FIELD_KEYS:
+        return "opaque"
+    return None
+
 
 def _haoee_is_media_field_key(key):
-    if not isinstance(key, str):
-        return False
-    kl = key.lower()
-    if kl in _HAOEE_MEDIA_FIELD_KEYS:
-        return True
-    return "b64" in kl or (kl.endswith("image") and kl != "image_size")
+    return _haoee_field_kind(key) is not None
 
 
 _HAOEE_B64_PAYLOAD_PREFIXES = ("iVBOR", "/9j/", "UklGR", "R0lGOD")
 _HAOEE_MIN_KNOWN_FIELD_B64_LEN = 200
 _HAOEE_MIN_FALLBACK_B64_LEN = 500
+_HAOEE_B64URL_ALPHABET = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
 
 
 def _haoee_extract_b64_payload(s):
@@ -1083,9 +1097,10 @@ def _haoee_extract_b64_payload(s):
 def _haoee_base64_char_ratio(payload):
     if not payload:
         return 0.0
+    # 同时接受标准 base64 (+/=) 与 URL-safe base64 (-_) 字符
     valid = sum(
         1 for c in payload
-        if c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r"
+        if c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/-_=\n\r"
     )
     return valid / len(payload)
 
@@ -1095,8 +1110,18 @@ def _haoee_try_b64decode(payload):
         p = payload.strip()
         if not p:
             return False
-        base64.b64decode(p, validate=True)
-        return True
+        try:
+            base64.b64decode(p, validate=True)
+            return True
+        except Exception:
+            pass
+        # URL-safe base64（用 - 和 _ 替代 + 和 /）：先严格校验字母表，再补齐 padding 解码，
+        # 避免 urlsafe_b64decode 默认丢弃非法字符导致的误判。
+        if all(c in _HAOEE_B64URL_ALPHABET for c in p):
+            pad = (-len(p)) % 4
+            base64.urlsafe_b64decode(p + ("=" * pad))
+            return True
+        return False
     except Exception:
         return False
 
@@ -1114,9 +1139,12 @@ def _haoee_is_base64_string(s, field_key=None):
         if payload.startswith(prefix) and _haoee_try_b64decode(payload):
             return True
 
-    if field_key and _haoee_is_media_field_key(field_key):
-        if len(s) >= _HAOEE_MIN_KNOWN_FIELD_B64_LEN and _haoee_base64_char_ratio(payload) >= 0.95:
-            if _haoee_try_b64decode(payload):
+    if field_key:
+        kind = _haoee_field_kind(field_key)
+        if kind and len(s) >= _HAOEE_MIN_KNOWN_FIELD_B64_LEN and _haoee_base64_char_ratio(payload) >= 0.95:
+            # 媒体 base64 应可解码；不透明 token（如 thoughtSignature）可能使用非标准
+            # padding 无法严格解码，按长度 + 字符占比直接脱敏。
+            if kind == "opaque" or _haoee_try_b64decode(payload):
                 return True
 
     if len(s) >= _HAOEE_MIN_FALLBACK_B64_LEN and _haoee_base64_char_ratio(payload) >= 0.95:
@@ -2055,14 +2083,17 @@ class Comfly_HaoeeImage_Gemini:
             generated_tensors = []
             texts_only = []
             for part in parts:
-                if "inlineData" in part:
-                    image_base64 = part["inlineData"]["data"]
+                # API 在思考 part 上会返回 "inlineData": null，需用真值判断而非键存在判断
+                inline_data = part.get("inlineData")
+                if inline_data:
+                    image_base64 = inline_data.get("data")
                     if image_base64:
                         image_data = base64.b64decode(image_base64)
                         generated_image = Image.open(BytesIO(image_data))
                         generated_tensor = pil2tensor(generated_image)
                         generated_tensors.append(generated_tensor)
-                elif "text" in part:
+                elif part.get("text"):
+                    # 跳过 "text": null 的 part，避免后续 "\n".join 报错
                     texts_only.append(part["text"])
 
             response_info = f"Generated {len(generated_tensors)} images using {model}\n"
