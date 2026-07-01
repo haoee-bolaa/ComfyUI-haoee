@@ -34,6 +34,16 @@ def _image_tensor_to_base64(image_tensor, with_prefix=True):
     return b64
 
 
+def _image_tensor_to_bytes(image_tensor):
+    """将 IMAGE 张量转为 PNG 字节串，用于 multipart/form-data 文件上传。"""
+    if image_tensor is None:
+        return None
+    pil_image = tensor2pil(image_tensor)[0]
+    buffered = BytesIO()
+    pil_image.save(buffered, format="PNG")
+    return buffered.getvalue()
+
+
 class ComflyVideoAdapter:
     def __init__(self, video_path_or_url):
         if video_path_or_url.startswith('http'):
@@ -2449,32 +2459,41 @@ def _haoee_parse_images_payload(result, prompt, model, size, response_format, ex
         _haoee_raise_parse(node, "no generated images in response", preview=json.dumps(result, ensure_ascii=False))
 
     for idx, item in enumerate(data_items):
-        if "b64_json" in item and item["b64_json"]:
-            b64_data = item["b64_json"]
-            print(f"{log_prefix} item[{idx}] decode b64_json, len={len(b64_data)}")
-            if b64_data.startswith("data:image/"):
-                b64_data = b64_data.split(",", 1)[1]
-            try:
-                image_data = base64.b64decode(b64_data)
-                generated_image = Image.open(BytesIO(image_data)).convert("RGB")
-                print(f"{log_prefix} item[{idx}] decoded image size={generated_image.size}, bytes={len(image_data)}")
-                generated_images.append(pil2tensor(generated_image))
-            except Exception as e:
-                print(f"{log_prefix} item[{idx}] ERROR decoding b64: {e}")
-        elif "url" in item and item["url"]:
-            url = item["url"]
-            print(f"{log_prefix} item[{idx}] download url={url}")
-            try:
-                img_resp = requests.get(url, timeout=HAOEE_HTTP_TIMEOUT_SEC)
-                img_resp.raise_for_status()
-                generated_image = Image.open(BytesIO(img_resp.content)).convert("RGB")
-                print(f"{log_prefix} item[{idx}] downloaded image size={generated_image.size}, bytes={len(img_resp.content)}")
-                generated_images.append(pil2tensor(generated_image))
-                response_info += f"Image URL: {url}\n"
-            except Exception as e:
-                print(f"{log_prefix} item[{idx}] ERROR downloading {url}: {e}")
-        else:
-            print(f"{log_prefix} item[{idx}] skipped: no b64_json/url, keys={list(item.keys()) if isinstance(item, dict) else type(item).__name__}")
+        decoded_ok = False
+        if isinstance(item, dict):
+            if item.get("b64_json"):
+                b64_data = item["b64_json"]
+                print(f"{log_prefix} item[{idx}] decode b64_json, len={len(b64_data)}")
+                if b64_data.startswith("data:image/"):
+                    b64_data = b64_data.split(",", 1)[1]
+                try:
+                    image_data = base64.b64decode(b64_data)
+                    generated_image = Image.open(BytesIO(image_data)).convert("RGB")
+                    print(f"{log_prefix} item[{idx}] decoded image size={generated_image.size}, bytes={len(image_data)}")
+                    generated_images.append(pil2tensor(generated_image))
+                    decoded_ok = True
+                except Exception as e:
+                    print(f"{log_prefix} item[{idx}] ERROR decoding b64: {e}")
+            elif item.get("url"):
+                url = item["url"]
+                print(f"{log_prefix} item[{idx}] download url={url}")
+                try:
+                    img_resp = requests.get(url, timeout=HAOEE_HTTP_TIMEOUT_SEC)
+                    img_resp.raise_for_status()
+                    generated_image = Image.open(BytesIO(img_resp.content)).convert("RGB")
+                    print(f"{log_prefix} item[{idx}] downloaded image size={generated_image.size}, bytes={len(img_resp.content)}")
+                    generated_images.append(pil2tensor(generated_image))
+                    response_info += f"Image URL: {url}\n"
+                    decoded_ok = True
+                except Exception as e:
+                    print(f"{log_prefix} item[{idx}] ERROR downloading {url}: {e}")
+            else:
+                print(f"{log_prefix} item[{idx}] skipped: no b64_json/url, keys={list(item.keys()) if isinstance(item, dict) else type(item).__name__}")
+
+        if decoded_ok and isinstance(item, dict) and item.get("revised_prompt"):
+            revised = item["revised_prompt"]
+            response_info += f"[Image {idx+1}] Revised Prompt: {revised}\n"
+            print(f"{log_prefix} item[{idx}] revised_prompt len={len(revised)}")
 
     if not generated_images:
         _haoee_raise_parse(node, f"images found but failed to decode/download (count={len(data_items)})")
@@ -2489,6 +2508,10 @@ def _haoee_parse_images_payload(result, prompt, model, size, response_format, ex
             response_info += f"Input Tokens: {usage['input_tokens']}\n"
         if "output_tokens" in usage:
             response_info += f"Output Tokens: {usage['output_tokens']}\n"
+        if "completion_tokens" in usage:
+            response_info += f"Completion Tokens: {usage['completion_tokens']}\n"
+        if "prompt_tokens" in usage:
+            response_info += f"Prompt Tokens: {usage['prompt_tokens']}\n"
         details = usage.get("input_tokens_details") or {}
         if details:
             response_info += "Input Token Details:\n"
@@ -2592,28 +2615,30 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
     def INPUT_TYPES(cls):
         return {
             "required": {
+                "image1": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True}),
                 "model": (["gpt-image-2"], {"default": "gpt-image-2"}),
                 "size": ([
+                    # 顺序与 https://maas-api.haoee.com 官方文档一致
                     "1024x1024（1K 1:1）", "2048x2048（2K 1:1）", "2880x2880（4K 1:1）",
-                    "1280x720（1K 16:9）", "2048x1152（2K 16:9）", "3840x2160（4K 16:9）",
-                    "720x1280（1K 9:16）", "1152x2048（2K 9:16）", "2160x3840（4K 9:16）",
-                    "1024x768（1K 4:3）", "2048x1536（2K 4:3）", "3264x2448（4K 4:3）",
-                    "768x1024（1K 3:4）", "1536x2048（2K 3:4）", "2448x3264（4K 3:4）",
-                    "1008x672（1K 3:2）", "2016x1344（2K 3:2）", "3504x2336（4K 3:2）",
-                    "672x1008（1K 2:3）", "1344x2016（2K 2:3）", "2336x3504（4K 2:3）",
                     "1040x832（1K 5:4）", "2080x1664（2K 5:4）", "3200x2560（4K 5:4）",
+                    "720x1280（1K 9:16）", "1152x2048（2K 9:16）", "2160x3840（4K 9:16）",
+                    "1280x720（1K 16:9）", "2048x1152（2K 16:9）", "3840x2160（4K 16:9）",
+                    "1024x768（1K 4:3）", "2048x1536（2K 4:3）", "3264x2448（4K 4:3）",
+                    "1008x672（1K 3:2）", "2016x1344（2K 3:2）", "3504x2336（4K 3:2）",
                     "832x1040（1K 4:5）", "1664x2080（2K 4:5）", "2560x3200（4K 4:5）",
+                    "768x1024（1K 3:4）", "1536x2048（2K 3:4）", "2448x3264（4K 3:4）",
+                    "672x1008（1K 2:3）", "1344x2016（2K 2:3）", "2336x3504（4K 2:3）",
                     "1344x576（1K 21:9）", "2016x864（2K 21:9）", "3696x1584（4K 21:9）",
                 ], {"default": "1024x1024（1K 1:1）"}),
                 "api_key": ("STRING", {"default": ""}),
             },
             "optional": {
                 "response_format": (["b64_json", "url"], {"default": "b64_json"}),
-                "image1": ("IMAGE",),
                 "image2": ("IMAGE",),
                 "image3": ("IMAGE",),
                 "image4": ("IMAGE",),
+                # seed 仅为兼容旧 workflow，/v1/images/edits 端点不支持 seed，静默忽略
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
             }
         }
@@ -2627,13 +2652,17 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
         self.timeout = HAOEE_HTTP_TIMEOUT_SEC
         self.api_key = None
 
-    def generate_image(self, prompt, model, size, api_key, response_format="b64_json",
-                       image1=None, image2=None, image3=None, image4=None, seed=0):
-        log_prefix = f"[{self.NODE_NAME}]"
-        ref_count = sum(1 for x in [image1, image2, image3, image4] if x is not None)
+    def generate_image(self, image1, prompt, model, size, api_key,
+                       response_format="b64_json",
+                       image2=None, image3=None, image4=None, seed=0):
         api_size = size.split("（", 1)[0].strip() if size else size
-        _haoee_log(self.NODE_NAME, f"==> start: model={model}, size={size} (api={api_size}), response_format={response_format}, "
-              f"prompt_len={len(prompt)}, ref_images={ref_count}, seed={seed}")
+        _haoee_log(self.NODE_NAME,
+                   f"==> start: model={model}, size={size} (api={api_size}), "
+                   f"response_format={response_format}, prompt_len={len(prompt)}, "
+                   f"image1={'yes' if image1 is not None else 'no'}, "
+                   f"image2={'yes' if image2 is not None else 'no'}, "
+                   f"image3={'yes' if image3 is not None else 'no'}, "
+                   f"image4={'yes' if image4 is not None else 'no'}, seed={seed} (ignored)")
 
         if api_key.strip():
             self.api_key = api_key
@@ -2642,45 +2671,56 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
         if not self.api_key:
             _haoee_raise_local(self.NODE_NAME, "API key not provided")
 
+        if image1 is None:
+            _haoee_raise_local(self.NODE_NAME,
+                               "image1 is required (API endpoint /v1/images/edits requires at least one image)")
+
         try:
             pbar = comfy.utils.ProgressBar(100)
             pbar.update_absolute(10)
 
+            # multipart/form-data：由 requests 自动设置 Content-Type + boundary
             headers = {
-                "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
                 "ModelName": model,
             }
 
-            payload = {
+            # 表单字段（非 JSON）
+            form_data = {
                 "model": model,
                 "prompt": prompt,
                 "size": api_size,
                 "response_format": response_format,
             }
+            # seed 不发送到 API（/edits 不支持），静默忽略
 
-            refs = []
-            for img in [image1, image2, image3, image4]:
+            # 重复 'image' 字段上传多张图（OpenAI image-edits 兼容标准做法）
+            files = []
+            for i, img in enumerate([image1, image2, image3, image4], start=1):
                 if img is not None:
-                    refs.append(_image_tensor_to_base64(img, with_prefix=True))
-            if refs:
-                payload["image"] = refs
-            _haoee_log_http_request(self.NODE_NAME, payload, headers=headers, label="create")
+                    png_bytes = _image_tensor_to_bytes(img)
+                    files.append(("image", (f"image{i}.png", png_bytes, "image/png")))
+
+            files_summary = ", ".join(f"{name}:{fname}({len(content)}B)" for name, (fname, content, _mime) in files)
+            _haoee_log(self.NODE_NAME,
+                       f"create multipart: data={json.dumps(form_data, ensure_ascii=False)}, "
+                       f"files=[{files_summary}]")
 
             pbar.update_absolute(25)
-            request_url = f"{baseurl}/v1/images/generations"
+            request_url = f"{baseurl}/v1/images/edits"
             _haoee_log(self.NODE_NAME, f"POST {request_url}")
             response = requests.post(
                 request_url,
                 headers=headers,
-                json=payload,
+                data=form_data,
+                files=files,
                 timeout=self.timeout,
             )
             if response.status_code != 200:
-                _haoee_raise_http(self.NODE_NAME, response, hint="generations")
+                _haoee_raise_http(self.NODE_NAME, response, hint="edits")
             _haoee_log_http_response(self.NODE_NAME, response)
 
-            result = _haoee_safe_json_parse(response, log_prefix, node=self.NODE_NAME)
+            result = _haoee_safe_json_parse(response, f"[{self.NODE_NAME}]", node=self.NODE_NAME)
             pbar.update_absolute(60)
 
             combined_tensor, response_info = _haoee_parse_images_payload(
@@ -2688,7 +2728,8 @@ class Comfly_HaoeeImage_Gpt_Image2_Generations:
                 extra_headline="GPT Image 2 Generation",
                 node=self.NODE_NAME,
             )
-            _haoee_log(self.NODE_NAME, f"parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
+            _haoee_log(self.NODE_NAME,
+                       f"parsed images_count={combined_tensor.shape[0] if hasattr(combined_tensor, 'shape') else 'n/a'}")
             pbar.update_absolute(100)
             _haoee_log(self.NODE_NAME, "<== done")
             return (combined_tensor, response_info)
