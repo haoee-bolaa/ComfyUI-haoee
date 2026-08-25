@@ -1141,9 +1141,9 @@ def _haoee_is_base64_string(s, field_key=None):
         return False
     payload = _haoee_extract_b64_payload(s)
 
+    # data URI 直接折叠，避免对整图做 5MB 级解码（失败还会把原文打进日志）
     if ";base64," in s and s.lower().startswith("data:"):
-        if _haoee_try_b64decode(payload):
-            return True
+        return True
 
     for prefix in _HAOEE_B64_PAYLOAD_PREFIXES:
         if payload.startswith(prefix) and _haoee_try_b64decode(payload):
@@ -1157,9 +1157,13 @@ def _haoee_is_base64_string(s, field_key=None):
             if kind == "opaque" or _haoee_try_b64decode(payload):
                 return True
 
-    if len(s) >= _HAOEE_MIN_FALLBACK_B64_LEN and _haoee_base64_char_ratio(payload) >= 0.95:
+    ratio = _haoee_base64_char_ratio(payload)
+    if len(s) >= _HAOEE_MIN_FALLBACK_B64_LEN and ratio >= 0.95:
         if _haoee_try_b64decode(payload):
             return True
+    # url 等非媒体字段塞裸 base64 时，超长高占比直接折叠，不依赖解码
+    if len(s) >= 2000 and ratio >= 0.95:
+        return True
 
     return False
 
@@ -1324,9 +1328,9 @@ class Comfly_HaoeeVideo_Doubao:
 
     def _download_last_frame(self, url):
         try:
-            resp = requests.get(url, timeout=HAOEE_HTTP_TIMEOUT_SEC)
-            resp.raise_for_status()
-            pil_img = Image.open(BytesIO(resp.content))
+            pil_img, _ = _haoee_image_from_ref(url)
+            if pil_img is None:
+                raise ValueError("unrecognized last_frame payload")
             return pil2tensor(pil_img)
         except Exception as e:
             _haoee_log(self.NODE_NAME, f"download last_frame failed: {e}")
@@ -1572,9 +1576,9 @@ class Comfly_HaoeeVideo_haoeedance:
 
     def _download_last_frame(self, url):
         try:
-            resp = requests.get(url, timeout=HAOEE_HTTP_TIMEOUT_SEC)
-            resp.raise_for_status()
-            pil_img = Image.open(BytesIO(resp.content))
+            pil_img, _ = _haoee_image_from_ref(url)
+            if pil_img is None:
+                raise ValueError("unrecognized last_frame payload")
             return pil2tensor(pil_img)
         except Exception as e:
             _haoee_log(self.NODE_NAME, f"download last_frame failed: {e}")
@@ -2098,10 +2102,11 @@ class Comfly_HaoeeImage_Gemini:
                 if inline_data:
                     image_base64 = inline_data.get("data")
                     if image_base64:
-                        image_data = base64.b64decode(image_base64)
-                        generated_image = Image.open(BytesIO(image_data))
-                        generated_tensor = pil2tensor(generated_image)
-                        generated_tensors.append(generated_tensor)
+                        generated_image, _ = _haoee_image_from_ref(image_base64)
+                        if generated_image is None:
+                            payload = image_base64.split(",", 1)[1] if image_base64.startswith("data:") else image_base64
+                            generated_image = Image.open(BytesIO(base64.b64decode(payload))).convert("RGB")
+                        generated_tensors.append(pil2tensor(generated_image))
                 elif part.get("text"):
                     # 跳过 "text": null 的 part，避免后续 "\n".join 报错
                     texts_only.append(part["text"])
@@ -2226,33 +2231,18 @@ class Comfly_HaoeeImage_Doubao_Seedream:
             generated_images = []
             image_urls = []
             for item in result["data"]:
-                if response_format == "url":
-                    image_url = item.get("url")
-                    if not image_url:
-                        continue
-
-                    image_urls.append(image_url)
-
-                    try:
-                        img_response = requests.get(image_url, timeout=self.timeout)
-                        img_response.raise_for_status()
-                        image_data = BytesIO(img_response.content)
-
-                        pil_image = Image.open(image_data)
-                        tensor_image = pil2tensor(pil_image)
-                        generated_images.append(tensor_image)
-                    except Exception as e:
-                        _haoee_log(self.NODE_NAME, f"download image failed: {e}")
-                else:
-                    b64_data = item.get("b64_json")
-                    if not b64_data:
-                        continue
-
-                    image_data = BytesIO(base64.b64decode(b64_data))
-
-                    pil_image = Image.open(image_data)
-                    tensor_image = pil2tensor(pil_image)
-                    generated_images.append(tensor_image)
+                ref = item.get("url") or item.get("b64_json")
+                if not ref:
+                    continue
+                try:
+                    pil_image, src = _haoee_image_from_ref(ref)
+                    if pil_image is None:
+                        raise ValueError("unrecognized image payload")
+                    generated_images.append(pil2tensor(pil_image))
+                    if src == "http":
+                        image_urls.append(ref)
+                except Exception as e:
+                    _haoee_log(self.NODE_NAME, f"decode/download image failed: {e}")
 
             pbar.update_absolute(80)
             if not generated_images:
@@ -2407,26 +2397,25 @@ class Comfly_HaoeeImage_Midjourney:
 
 
             try:
-                img_response = requests.get(imageUrl, timeout=self.timeout)
-                img_response.raise_for_status()
-                image_data = BytesIO(img_response.content)
-
-                pil_image = Image.open(image_data)
+                pil_image, src = _haoee_image_from_ref(imageUrl)
+                if pil_image is None:
+                    raise ValueError("unrecognized image payload")
                 tensor_image = pil2tensor(pil_image)
             except Exception as e:
                 _haoee_raise_parse(self.NODE_NAME, f"error downloading image: {e}")
 
             pbar.update_absolute(100)
 
+            out_url = imageUrl if src == "http" else ""
             response_info = {
                 "prompt": prompt,
                 "botType": botType,
                 "state": state,
                 "seed": seed if seed != -1 else "auto",
-                "imageUrl": imageUrl
+                "imageUrl": out_url
             }
 
-            return (tensor_image, json.dumps(response_info, ensure_ascii=False), imageUrl or "")
+            return (tensor_image, json.dumps(response_info, ensure_ascii=False), out_url)
 
         except HaoeeNodeError:
             raise
@@ -2435,6 +2424,31 @@ class Comfly_HaoeeImage_Midjourney:
         except Exception as e:
             traceback.print_exc()
             _haoee_raise_local(self.NODE_NAME, f"unexpected: {type(e).__name__}: {e}")
+
+
+def _haoee_image_from_ref(ref):
+    """
+    将图片引用转为 RGB PIL。
+    支持 data URI、裸 base64、http(s) URL。无法识别时返回 (None, None)。
+    第二个返回值：inline 为本地解码，http 为远程下载。
+    """
+    if not isinstance(ref, str) or not ref.strip():
+        return None, None
+    s = ref.strip()
+    if s.lower().startswith("data:") and "," in s:
+        payload = s.split(",", 1)[1]
+        image_data = base64.b64decode(payload)
+        return Image.open(BytesIO(image_data)).convert("RGB"), "inline"
+    if s.startswith(("http://", "https://")):
+        img_resp = requests.get(s, timeout=HAOEE_HTTP_TIMEOUT_SEC)
+        img_resp.raise_for_status()
+        return Image.open(BytesIO(img_resp.content)).convert("RGB"), "http"
+    if len(s) >= 200:
+        payload = _haoee_extract_b64_payload(s)
+        if _haoee_base64_char_ratio(payload) >= 0.95:
+            image_data = base64.b64decode(payload)
+            return Image.open(BytesIO(image_data)).convert("RGB"), "inline"
+    return None, None
 
 
 def _haoee_parse_images_payload(result, prompt, model, size, response_format, extra_headline="GPT Image 2 Generation", node="ParseImages"):
@@ -2464,29 +2478,33 @@ def _haoee_parse_images_payload(result, prompt, model, size, response_format, ex
             if item.get("b64_json"):
                 b64_data = item["b64_json"]
                 print(f"{log_prefix} item[{idx}] decode b64_json, len={len(b64_data)}")
-                if b64_data.startswith("data:image/"):
-                    b64_data = b64_data.split(",", 1)[1]
                 try:
-                    image_data = base64.b64decode(b64_data)
-                    generated_image = Image.open(BytesIO(image_data)).convert("RGB")
-                    print(f"{log_prefix} item[{idx}] decoded image size={generated_image.size}, bytes={len(image_data)}")
+                    generated_image, _ = _haoee_image_from_ref(b64_data)
+                    if generated_image is None:
+                        raise ValueError("unrecognized b64_json payload")
+                    print(f"{log_prefix} item[{idx}] decoded image size={generated_image.size}")
                     generated_images.append(pil2tensor(generated_image))
                     decoded_ok = True
                 except Exception as e:
                     print(f"{log_prefix} item[{idx}] ERROR decoding b64: {e}")
             elif item.get("url"):
                 url = item["url"]
-                print(f"{log_prefix} item[{idx}] download url={url}")
                 try:
-                    img_resp = requests.get(url, timeout=HAOEE_HTTP_TIMEOUT_SEC)
-                    img_resp.raise_for_status()
-                    generated_image = Image.open(BytesIO(img_resp.content)).convert("RGB")
-                    print(f"{log_prefix} item[{idx}] downloaded image size={generated_image.size}, bytes={len(img_resp.content)}")
+                    if url.startswith(("http://", "https://")):
+                        print(f"{log_prefix} item[{idx}] download url={url}")
+                    else:
+                        print(f"{log_prefix} item[{idx}] decode inline url, len={len(url)}")
+                    generated_image, src = _haoee_image_from_ref(url)
+                    if generated_image is None:
+                        raise ValueError("unrecognized url payload")
+                    print(f"{log_prefix} item[{idx}] decoded image size={generated_image.size}")
                     generated_images.append(pil2tensor(generated_image))
-                    response_info += f"Image URL: {url}\n"
+                    if src == "http":
+                        response_info += f"Image URL: {url}\n"
                     decoded_ok = True
                 except Exception as e:
-                    print(f"{log_prefix} item[{idx}] ERROR downloading {url}: {e}")
+                    preview = f"{url[:48]}... (len={len(url)})" if not url.startswith(("http://", "https://")) else url
+                    print(f"{log_prefix} item[{idx}] ERROR decoding/downloading url: {e} preview={preview}")
             else:
                 print(f"{log_prefix} item[{idx}] skipped: no b64_json/url, keys={list(item.keys()) if isinstance(item, dict) else type(item).__name__}")
 
@@ -2519,67 +2537,6 @@ def _haoee_parse_images_payload(result, prompt, model, size, response_format, ex
                 response_info += f"  Text Tokens: {details['text_tokens']}\n"
             if "image_tokens" in details:
                 response_info += f"  Image Tokens: {details['image_tokens']}\n"
-
-    combined_tensor = torch.cat(generated_images, dim=0)
-    print(f"{log_prefix} <== done: generated_images={len(generated_images)}, tensor_shape={tuple(combined_tensor.shape)}")
-    return combined_tensor, response_info
-
-
-def _haoee_parse_results_payload(result, prompt, model, size, node="ParseResults"):
-    log_prefix = f"[{node}]"
-    print(f"{log_prefix} parse_results ==> start: model={model}, size={size}, "
-          f"result_keys={list(result.keys()) if isinstance(result, dict) else type(result).__name__}")
-
-    status = result.get("status")
-    print(f"{log_prefix} status={status!r}")
-    if status and status != "succeeded":
-        reason = result.get("failure_reason") or result.get("error") or ""
-        _haoee_raise_api(node, f"task status={status}. {reason}".strip())
-
-    items = result.get("results") or []
-    print(f"{log_prefix} results count={len(items)}")
-    if not items:
-        _haoee_raise_parse(node, "no results in response", preview=json.dumps(result, ensure_ascii=False))
-
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    response_info = f"**GPT Image 2 Generation Test ({timestamp})**\n\n"
-    response_info += f"Prompt: {prompt}\n"
-    response_info += f"Model: {model}\n"
-    if size:
-        response_info += f"Size: {size}\n"
-    task_id = result.get("id") or result.get("task_id")
-    if task_id:
-        response_info += f"Task ID: {task_id}\n"
-        print(f"{log_prefix} task_id={task_id}")
-    start_time = result.get("start_time")
-    end_time = result.get("end_time")
-    if start_time and end_time:
-        response_info += f"Duration: {int(end_time) - int(start_time)}s\n"
-        print(f"{log_prefix} duration={int(end_time) - int(start_time)}s (start={start_time}, end={end_time})")
-    progress = result.get("progress")
-    if progress is not None:
-        response_info += f"Progress: {progress}\n"
-    response_info += "\n"
-
-    generated_images = []
-    for idx, it in enumerate(items):
-        url = it.get("url")
-        if not url:
-            print(f"{log_prefix} item[{idx}] skipped: no url, keys={list(it.keys()) if isinstance(it, dict) else type(it).__name__}")
-            continue
-        print(f"{log_prefix} item[{idx}] download url={url}")
-        try:
-            img_resp = requests.get(url, timeout=HAOEE_HTTP_TIMEOUT_SEC)
-            img_resp.raise_for_status()
-            generated_image = Image.open(BytesIO(img_resp.content)).convert("RGB")
-            print(f"{log_prefix} item[{idx}] downloaded image size={generated_image.size}, bytes={len(img_resp.content)}")
-            generated_images.append(pil2tensor(generated_image))
-            response_info += f"Image URL: {url}\n"
-        except Exception as e:
-            print(f"{log_prefix} item[{idx}] ERROR downloading {url}: {e}")
-
-    if not generated_images:
-        _haoee_raise_parse(node, f"{len(items)} results but no image downloaded")
 
     combined_tensor = torch.cat(generated_images, dim=0)
     print(f"{log_prefix} <== done: generated_images={len(generated_images)}, tensor_shape={tuple(combined_tensor.shape)}")
